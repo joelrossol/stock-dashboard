@@ -9,6 +9,7 @@
 import "server-only";
 import { addDays, etDate, etToEpoch, isWeekend, sessionOnOrBefore } from "@/lib/dates";
 import { after } from "next/server";
+import { ENV_NAMES, readEnv } from "@/lib/env";
 import { createLiveFinnhubSource } from "@/lib/data/finnhub/client";
 import { createEmptyFinnhubSource } from "@/lib/data/finnhub/empty";
 import { normalizeEarnings, normalizeNews, normalizeProfile, normalizeRecommendations } from "@/lib/data/finnhub/normalize";
@@ -255,7 +256,7 @@ async function buildLive(overrides: AccountOverrides, extraSymbols: string[], co
   await upsertSnapshots(accounts.map((a) => ({ accountId: a.id, date: asOf, value: a.liquidationValue, cash: a.cash, source: "snapshot" })));
   const snapshots = await listSnapshots();
 
-  const finnhubKey = process.env.FINNHUB_API_KEY?.trim();
+  const finnhubKey = readEnv(ENV_NAMES.finnhub).value;
   const live = finnhubKey ? createLiveFinnhubSource(finnhubKey, { budgetMs: 2500, symbols }) : null;
   const finnhub = live ?? createEmptyFinnhubSource();
   // Earnings first: one call covers every symbol.

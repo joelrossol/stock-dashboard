@@ -3,11 +3,13 @@ import { Suspense } from "react";
 import { disconnectSchwabAction, refreshDataAction, resetThresholdsAction, saveAccountsAction, saveThresholdsAction } from "@/app/actions";
 import { expiresLabel } from "@/components/shell/ConnectionChip";
 import { DataSourceToggle } from "@/components/settings/DataSourceToggle";
+import { ConfigCheck } from "@/components/settings/ConfigCheck";
 import { headers } from "next/headers";
 import { Card, CardHeader, Chip, PageHeader, Skeleton } from "@/components/ui/primitives";
 import { DEFAULT_THRESHOLDS, THRESHOLD_FIELDS } from "@/lib/analytics/thresholds";
 import { getPageContext } from "@/lib/context";
 import { databaseInfo } from "@/lib/db/client";
+import { ENV_NAMES, readEnv } from "@/lib/env";
 import { fmtDate } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -27,7 +29,7 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
   const [{ data, settings, schwabExpiresInMs }, sp, h] = await Promise.all([getPageContext(), searchParams, headers()]);
   const here = `${h.get("x-forwarded-proto") ?? (h.get("host")?.startsWith("127.0.0.1") ? "https" : "http")}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const conn = data.connection;
-  const finnhubOn = !!process.env.FINNHUB_API_KEY?.trim();
+  const finnhubOn = !!readEnv(ENV_NAMES.finnhub).value;
   const db = databaseInfo();
   const st = conn.status;
   const justConnected = sp.connected === "1";
@@ -54,6 +56,8 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
   return (
     <div className="flex flex-col gap-2">
       <PageHeader title="Settings" sub="Connections, accounts, and the rules behind every insight" />
+
+      <ConfigCheck />
 
       <Card>
         <CardHeader title="Data source" right={data.mode === "live" ? <Chip tone="up">Showing live data</Chip> : <Chip tone="warn">Showing sample data</Chip>} />

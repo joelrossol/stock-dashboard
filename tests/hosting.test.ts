@@ -33,3 +33,15 @@ describe("hosting fallbacks", () => {
     expect(decrypt(encrypt("refresh-token-123"))).toBe("refresh-token-123");
   });
 });
+
+describe("env name aliases", () => {
+  it("finds Schwab keys under alternate names and any letter case", async () => {
+    vi.stubEnv("SCHWAB_APP_KEY", "");
+    vi.stubEnv("SCHWAB_APP_SECRET", "");
+    vi.stubEnv("Client_ID", " abc123 ");
+    vi.stubEnv("Client_Secret", '"shh"');
+    const { readEnv, ENV_NAMES } = await import("@/lib/env");
+    expect(readEnv(ENV_NAMES.schwabKey)).toEqual({ value: "abc123", name: "Client_ID" });
+    expect(readEnv(ENV_NAMES.schwabSecret)).toEqual({ value: "shh", name: "Client_Secret" });
+  });
+});

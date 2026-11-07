@@ -6,6 +6,7 @@
 import "server-only";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { deleteTokens, loadTokens, saveTokens } from "@/lib/db/queries";
+import { ENV_NAMES, readEnv } from "@/lib/env";
 
 const AUTHORIZE_URL = "https://api.schwabapi.com/v1/oauth/authorize";
 const TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token";
@@ -28,8 +29,8 @@ export interface SchwabConfig {
 }
 
 /** Explicit SCHWAB_CALLBACK_URL, else the Vercel production domain, else local HTTPS. */
-function callbackUrlValue(): string {
-  const explicit = process.env.SCHWAB_CALLBACK_URL?.trim();
+export function callbackUrl(): string {
+  const explicit = readEnv(["SCHWAB_CALLBACK_URL"]).value;
   if (explicit) return explicit;
   const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (process.env.VERCEL && prod) return `https://${prod}/api/auth/schwab/callback`;
@@ -37,11 +38,10 @@ function callbackUrlValue(): string {
 }
 
 export function schwabConfig(): SchwabConfig | null {
-  const appKey = process.env.SCHWAB_APP_KEY?.trim();
-  const appSecret = process.env.SCHWAB_APP_SECRET?.trim();
-  const callbackUrl = callbackUrlValue();
+  const appKey = readEnv(ENV_NAMES.schwabKey).value;
+  const appSecret = readEnv(ENV_NAMES.schwabSecret).value;
   if (!appKey || !appSecret) return null;
-  return { appKey, appSecret, callbackUrl };
+  return { appKey, appSecret, callbackUrl: callbackUrl() };
 }
 
 function requireConfig(): SchwabConfig {
@@ -149,12 +149,12 @@ export interface SchwabStatus {
 
 export async function schwabStatus(): Promise<SchwabStatus> {
   const c = schwabConfig();
-  const callbackUrl = c?.callbackUrl ?? callbackUrlValue();
-  if (!c) return { configured: false, connected: false, expired: false, refreshExpiresAt: null, callbackUrl };
+  const cb = c?.callbackUrl ?? callbackUrl();
+  if (!c) return { configured: false, connected: false, expired: false, refreshExpiresAt: null, callbackUrl: cb };
   const stored = await loadTokens();
-  if (!stored) return { configured: true, connected: false, expired: false, refreshExpiresAt: null, callbackUrl };
+  if (!stored) return { configured: true, connected: false, expired: false, refreshExpiresAt: null, callbackUrl: cb };
   const expired = Date.now() >= stored.refreshExpiresAt;
-  return { configured: true, connected: !expired, expired, refreshExpiresAt: stored.refreshExpiresAt, callbackUrl };
+  return { configured: true, connected: !expired, expired, refreshExpiresAt: stored.refreshExpiresAt, callbackUrl: cb };
 }
 
 export async function disconnectSchwab(): Promise<void> {
