@@ -10,6 +10,7 @@ import "server-only";
 import { addDays, etDate, etToEpoch, isWeekend, sessionOnOrBefore } from "@/lib/dates";
 import { after } from "next/server";
 import { ENV_NAMES, readEnv } from "@/lib/env";
+import { fundCategory } from "@/lib/data/classify";
 import { createLiveFinnhubSource } from "@/lib/data/finnhub/client";
 import { createEmptyFinnhubSource } from "@/lib/data/finnhub/empty";
 import { normalizeEarnings, normalizeNews, normalizeProfile, normalizeRecommendations } from "@/lib/data/finnhub/normalize";
@@ -27,7 +28,7 @@ import {
 } from "@/lib/data/schwab/normalize";
 import type { FinnhubSource, SchwabSource } from "@/lib/data/source";
 import type { Bar, Connection, Instrument, NewsItem, PortfolioData, RecTrend } from "@/lib/data/types";
-import { getDataModePref, listSchwabTransactions, listSnapshots, readSetting, upsertSchwabTransactions, upsertSnapshots, writeSetting } from "@/lib/db/queries";
+import { getDataModePref, listSchwabTransactions, listSnapshots, loadMarketCache, readSetting, saveMarketCache, upsertSchwabTransactions, upsertSnapshots, writeSetting } from "@/lib/db/queries";
 
 const LIVE_TTL_MS = 60_000;
 
@@ -128,6 +129,7 @@ async function reference(
   held: Set<string>,
   asOf: string,
   etfHint: Set<string> = new Set(),
+  fundHint: Set<string> = new Set(),
 ) {
   const instruments: Record<string, Instrument> = {};
   const recommendations: Record<string, RecTrend[]> = {};
@@ -136,19 +138,22 @@ async function reference(
   await Promise.all(
     symbols.map(async (s) => {
       const q = quotes[s];
-      const prof = normalizeProfile(await finnhub.profile(s));
-      const isEtf = posType.get(s) === "ETF" || etfHint.has(s) || prof.sector === "Broad market" || s === "SPY";
+      const isFund = posType.get(s) === "FUND" || fundHint.has(s);
+      // Finnhub has no profiles for mutual funds; skip the call to save quota.
+      const prof = isFund ? normalizeProfile({}) : normalizeProfile(await finnhub.profile(s));
+      const isEtf = !isFund && (posType.get(s) === "ETF" || etfHint.has(s) || prof.sector === "Broad market" || s === "SPY");
       const known = prof.industry && prof.industry !== "Other";
+      const name = q?.name ?? prof.name ?? s;
       instruments[s] = {
         symbol: s,
-        name: q?.name ?? prof.name ?? s,
-        assetType: isEtf ? "ETF" : posType.get(s) === "OTHER" ? "OTHER" : "EQUITY",
-        sector: isEtf ? "Broad market" : known ? prof.sector : "Unclassified",
-        industry: isEtf ? "ETF" : known ? prof.industry : "Unclassified",
+        name,
+        assetType: isFund ? "FUND" : isEtf ? "ETF" : posType.get(s) === "OTHER" ? "OTHER" : "EQUITY",
+        sector: isFund || isEtf ? fundCategory(s, name) : known ? prof.sector : "Unclassified",
+        industry: isFund ? "Mutual fund" : isEtf ? "ETF" : known ? prof.industry : "Unclassified",
         marketCap: prof.marketCap,
       };
-      if (!isEtf && held.has(s)) recommendations[s] = normalizeRecommendations(await finnhub.recommendations(s));
-      if (held.has(s) && !isEtf) news.push(...normalizeNews(await finnhub.news(s, addDays(asOf, -7), asOf), s));
+      if (!isEtf && !isFund && held.has(s)) recommendations[s] = normalizeRecommendations(await finnhub.recommendations(s));
+      if (held.has(s) && !isEtf && !isFund) news.push(...normalizeNews(await finnhub.news(s, addDays(asOf, -7), asOf), s));
     }),
   );
   return { instruments, recommendations, news: news.sort((a, b) => b.datetime - a.datetime) };
@@ -156,31 +161,49 @@ async function reference(
 
 // ─── Live Schwab data ─────────────────────────────────────────────────
 
-/** Fetch recent transactions every load; reach further back once a day. Everything is stored. */
+/**
+ * Fetch the last 90 days of transactions every load and store them. Once a day,
+ * reach back 3 years too: inline the very first time, otherwise after the response
+ * so it doesn't slow the page down.
+ */
 async function syncTransactions(schwab: SchwabSource, numbers: { accountNumber: string; hashValue: string }[]) {
   const today = etDate(new Date());
   const lastBackfill = await readSetting<string>("schwab_txn_backfill", "");
-  const windows: [string, string, boolean][] = [[addDays(today, -89), today, true]];
-  if (lastBackfill !== today) {
-    for (let k = 0; k < 3; k++) windows.push([addDays(today, -365 * (k + 1)), addDays(today, k === 0 ? -90 : -365 * k - 1), false]);
+  await syncWindows(schwab, numbers, [[addDays(today, -89), today, true]]);
+  if (lastBackfill === today) return;
+  const older: [string, string, boolean][] = [];
+  for (let k = 0; k < 3; k++) older.push([addDays(today, -365 * (k + 1)), addDays(today, k === 0 ? -90 : -365 * k - 1), false]);
+  const backfill = async () => {
+    await syncWindows(schwab, numbers, older);
+    await writeSetting("schwab_txn_backfill", today);
+  };
+  if (!lastBackfill) return backfill();
+  try {
+    after(() => backfill().catch(() => {}));
+  } catch {
+    void backfill().catch(() => {});
   }
+}
+
+async function syncWindows(schwab: SchwabSource, numbers: { accountNumber: string; hashValue: string }[], windows: [string, string, boolean][]) {
   const rows: { activityId: string; accountNumber: string; time: string; json: string }[] = [];
-  for (const n of numbers) {
-    for (const [start, end, required] of windows) {
-      try {
-        const raw = await schwab.transactions(n.hashValue, start, end);
-        for (const r of (Array.isArray(raw) ? raw : []) as { activityId?: unknown; accountNumber?: string; time?: string }[]) {
-          if (r.activityId == null || !r.time) continue;
-          rows.push({ activityId: String(r.activityId), accountNumber: r.accountNumber ?? n.accountNumber, time: r.time, json: JSON.stringify(r) });
+  await Promise.all(
+    numbers.map(async (n) => {
+      for (const [start, end, required] of windows) {
+        try {
+          const raw = await schwab.transactions(n.hashValue, start, end);
+          for (const r of (Array.isArray(raw) ? raw : []) as { activityId?: unknown; accountNumber?: string; time?: string }[]) {
+            if (r.activityId == null || !r.time) continue;
+            rows.push({ activityId: String(r.activityId), accountNumber: r.accountNumber ?? n.accountNumber, time: r.time, json: JSON.stringify(r) });
+          }
+        } catch (e) {
+          if (required) throw e;
+          break; // older history isn't available; stop reaching back for this account
         }
-      } catch (e) {
-        if (required) throw e;
-        break; // older history isn't available; stop reaching back for this account
       }
-    }
-  }
+    }),
+  );
   await upsertSchwabTransactions(rows);
-  if (lastBackfill !== today) await writeSetting("schwab_txn_backfill", today);
 }
 
 interface RawQuote {
@@ -231,15 +254,31 @@ async function buildLive(overrides: AccountOverrides, extraSymbols: string[], co
   const quotes = normalizeQuotes(clean);
   const charted = Object.keys(clean).filter((s) => ["EQUITY", "MUTUAL_FUND", "INDEX"].includes(clean[s].assetMainType ?? "EQUITY"));
   const etfHint = new Set(Object.keys(clean).filter((s) => clean[s].assetSubType === "ETF"));
+  const fundHint = new Set(Object.keys(clean).filter((s) => clean[s].assetMainType === "MUTUAL_FUND" || clean[s].assetMainType === "MONEY_MARKET_FUND"));
 
   const daily: Record<string, Bar[]> = {};
   const intraday: Record<string, Bar[]> = {};
+  // Daily history only changes once a day: keep it in the database and refetch
+  // after the ET date rolls over. Today's bar always comes from the live quote.
+  const today = etDate(new Date());
+  const barCache = await loadMarketCache(charted.map((s) => `daily:${s}`)).catch(() => new Map<string, { json: string; fetchedAt: number }>());
+  const freshBars: { key: string; json: string; fetchedAt: number }[] = [];
   await Promise.all(
     charted.map(async (s) => {
+      const hit = barCache.get(`daily:${s}`);
       try {
-        daily[s] = patchToday(normalizePriceHistory(await schwab.priceHistory(s, { periodType: "year", period: 3, frequencyType: "daily", frequency: 1 })), clean[s]);
+        let bars: Bar[];
+        if (hit && etDate(new Date(hit.fetchedAt)) === today) {
+          bars = JSON.parse(hit.json) as Bar[];
+        } else {
+          bars = normalizePriceHistory(await schwab.priceHistory(s, { periodType: "year", period: 3, frequencyType: "daily", frequency: 1 }));
+          // Drop today's partial candle before storing; patchToday rebuilds it from the quote.
+          const complete = bars.filter((b) => b.date < today);
+          if (complete.length) freshBars.push({ key: `daily:${s}`, json: JSON.stringify(complete), fetchedAt: Date.now() });
+        }
+        daily[s] = patchToday(bars, clean[s]);
       } catch {
-        daily[s] = [];
+        daily[s] = hit ? patchToday(JSON.parse(hit.json) as Bar[], clean[s]) : [];
       }
       if (held.has(s) || s === "SPY") {
         try {
@@ -250,6 +289,14 @@ async function buildLive(overrides: AccountOverrides, extraSymbols: string[], co
       }
     }),
   );
+  if (freshBars.length) {
+    const save = () => saveMarketCache(freshBars).catch(() => {});
+    try {
+      after(save);
+    } catch {
+      void save();
+    }
+  }
   if (!daily.SPY?.length) throw new Error("Couldn't load S&P 500 (SPY) price history from Schwab.");
   const asOf = daily.SPY.at(-1)?.date ?? sessionOnOrBefore(etDate(new Date()));
 
@@ -261,7 +308,7 @@ async function buildLive(overrides: AccountOverrides, extraSymbols: string[], co
   const finnhub = live ?? createEmptyFinnhubSource();
   // Earnings first: one call covers every symbol.
   const earnings = normalizeEarnings(await finnhub.earningsCalendar(asOf, addDays(asOf, 90)));
-  const { instruments, recommendations, news } = await reference(finnhub, symbols, quotes, positions, held, asOf, etfHint);
+  const { instruments, recommendations, news } = await reference(finnhub, symbols, quotes, positions, held, asOf, etfHint, fundHint);
   if (live) {
     try {
       after(() => live.drain()); // finish anything that didn't fit in this request's time budget

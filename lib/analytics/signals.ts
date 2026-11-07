@@ -1,4 +1,5 @@
 /** Rule-based signals. Transparent and mechanical: signals, not advice. */
+import { isDiversified } from "@/lib/data/classify";
 import { diffDays, fmtDate } from "@/lib/dates";
 import { money, pct, pts } from "@/lib/format";
 import type { EarningsEvent, RecTrend } from "@/lib/data/types";
@@ -254,7 +255,7 @@ export function generateSignals(input: SignalInput): Signal[] {
     }
 
     // Broad-market funds are diversified by design, so the single-stock cap doesn't apply.
-    const overCap = h.sector !== "Broad market" && h.weight > t.stockCap;
+    const overCap = !isDiversified(h.sector) && h.weight > t.stockCap;
     if (overCap) {
       add({
         type: "concentration-stock",
@@ -365,14 +366,14 @@ export function generateSignals(input: SignalInput): Signal[] {
 
   // Portfolio ──────────────────────────────────────────────────────────
   for (const sw of input.sectorWeights) {
-    if (sw.sector === "Broad market" || sw.sector === "Unclassified" || sw.weight <= t.sectorCap) continue;
+    if (isDiversified(sw.sector) || sw.weight <= t.sectorCap) continue;
     add({
       type: "concentration-sector",
       severity: "caution",
       tag: "Risk",
       title: `${sw.sector} is ${pct(sw.weight, { digits: 0, sign: false })} of your portfolio`,
       detail: `Above your ${pct(t.sectorCap, { digits: 0, sign: false })} sector cap`,
-      reasons: [`${money(sw.value)} in ${sw.sector}`, "Broad-market ETFs are excluded from sector caps"],
+      reasons: [`${money(sw.value)} in ${sw.sector}`, "Diversified funds are excluded from sector caps"],
       metrics: [{ label: "Weight", value: pct(sw.weight, { digits: 1, sign: false }) }, { label: "Cap", value: pct(t.sectorCap, { digits: 0, sign: false }) }],
       score: 2 + (sw.weight - t.sectorCap) * 8,
     });

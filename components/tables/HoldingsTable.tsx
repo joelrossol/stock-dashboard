@@ -15,7 +15,7 @@ import { Fragment, useMemo, useState } from "react";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { Chip, Delta, SEVERITY_TONE, toneClass } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
-import { money, pct, price, shares } from "@/lib/format";
+import { money, price, shares } from "@/lib/format";
 import type { HoldingRow } from "@/lib/model";
 
 const features = tableFeatures({
@@ -50,24 +50,21 @@ const columns = helper.columns([
       </div>
     ),
   }),
-  helper.accessor("price", { header: "Price", sortFn: "basic", meta: { cls: num }, cell: (c) => price(c.getValue()) }),
-  helper.accessor("dayPct", { header: "Day", sortFn: "basic", meta: { cls: num }, cell: (c) => <Delta value={c.getValue()} /> }),
-  helper.accessor("quantity", { header: "Shares", sortFn: "basic", meta: { cls: num }, cell: (c) => shares(c.getValue()) }),
-  helper.accessor("avgCost", { header: "Avg cost", sortFn: "basic", meta: { cls: num }, cell: (c) => price(c.getValue()) }),
-  helper.accessor("marketValue", { header: "Value", sortFn: "basic", meta: { cls: num }, cell: (c) => money(c.getValue()) }),
-  helper.accessor("weight", {
-    header: "Weight",
+  helper.accessor("dayPL", {
+    header: "Day",
     sortFn: "basic",
     meta: { cls: num },
     cell: (c) => (
-      <div className="flex items-center justify-end gap-1.5">
-        <span>{pct(c.getValue(), { digits: 1, sign: false })}</span>
-        <span className="h-1 w-7 overflow-hidden rounded-full bg-white/7">
-          <span className="block h-full bg-accent" style={{ width: `${Math.min(100, c.getValue() * 400)}%` }} />
-        </span>
+      <div>
+        <div className={toneClass(c.getValue())}>{money(c.getValue(), { sign: true })}</div>
+        <div className="text-[0.6562rem]">
+          <Delta value={c.row.original.dayPct} digits={2} />
+        </div>
       </div>
     ),
   }),
+  helper.accessor("quantity", { header: "Shares", sortFn: "basic", meta: { cls: num }, cell: (c) => shares(c.getValue()) }),
+  helper.accessor("marketValue", { header: "Value", sortFn: "basic", meta: { cls: num }, cell: (c) => money(c.getValue()) }),
   helper.accessor("gain", {
     header: "Gain",
     sortFn: "basic",
@@ -99,7 +96,7 @@ const columns = helper.columns([
   }),
 ]);
 
-const WIDTHS = ["15%", "8%", "7%", "6%", "6%", "7%", "8%", "8%", "8%", "6%", "6%", "6%", "9%"];
+const WIDTHS = ["18%", "9%", "9%", "7%", "10%", "10%", "7%", "7%", "7%", "11%"];
 
 export function HoldingsTable({ rows }: { rows: HoldingRow[] }) {
   const data = useMemo(() => rows, [rows]);
@@ -108,7 +105,7 @@ export function HoldingsTable({ rows }: { rows: HoldingRow[] }) {
 
   return (
     <div className="-mx-3 overflow-x-auto px-3">
-      <table className="w-full min-w-[60rem] table-fixed text-[0.75rem]">
+      <table className="w-full min-w-[50rem] table-fixed text-[0.75rem]">
         <colgroup>
           <col style={{ width: 28 }} />
           {WIDTHS.map((w, i) => (
@@ -163,7 +160,7 @@ export function HoldingsTable({ rows }: { rows: HoldingRow[] }) {
                 {multi && isOpen && (
                   <tr>
                     <td />
-                    <td colSpan={13} className="pb-2">
+                    <td colSpan={WIDTHS.length} className="pb-2">
                       <div className="flex flex-wrap gap-1.5">
                         {r.accounts.map((a) => (
                           <div key={a.accountId} className="flex items-center gap-2 rounded-lg border border-line bg-bg/60 px-2 py-1 text-[0.6875rem]">

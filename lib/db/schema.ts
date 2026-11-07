@@ -77,3 +77,10 @@ export const finnhubCache = sqliteTable("finnhub_cache", {
   json: text("json").notNull(),
   fetchedAt: integer("fetched_at").notNull(),
 });
+
+/** Cached Schwab market data (daily price history), refreshed once per trading day. */
+export const marketCache = sqliteTable("market_cache", {
+  key: text("key").primaryKey(),
+  json: text("json").notNull(),
+  fetchedAt: integer("fetched_at").notNull(),
+});

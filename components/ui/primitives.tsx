@@ -14,7 +14,7 @@ export function Card({ className, children, ...props }: HTMLAttributes<HTMLDivEl
 export function CardHeader({ title, right, className }: { title: ReactNode; right?: ReactNode; className?: string }) {
   return (
     <div className={cn("mb-2 flex items-center justify-between gap-2", className)}>
-      <h3 className="text-[0.75rem] font-medium text-fg-2">{title}</h3>
+      <h3 className="text-[0.8rem] font-medium text-fg">{title}</h3>
       {right != null && <div className="text-[0.6875rem] text-fg-3">{right}</div>}
     </div>
   );

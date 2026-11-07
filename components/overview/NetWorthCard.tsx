@@ -30,7 +30,7 @@ export function NetWorthCard({ series, total, label, height = 262 }: { series: R
         <div>
           <p className="text-[0.6875rem] text-fg-3">Net worth · {label}</p>
           <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-[1.625rem] font-medium leading-none tracking-tight">{money(total)}</span>
+            <span className="text-[1.875rem] font-medium leading-none tracking-tight">{money(total)}</span>
             <Chip tone={up ? "up" : "down"}>{pct(s.gainPct)}</Chip>
           </div>
           <p className="mt-1 text-[0.6875rem] text-fg-2">

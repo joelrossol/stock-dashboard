@@ -18,6 +18,7 @@ const BOOTSTRAP = [
   `CREATE TABLE IF NOT EXISTS account_snapshots (account_id TEXT NOT NULL, date TEXT NOT NULL, value REAL NOT NULL, cash REAL, source TEXT NOT NULL, PRIMARY KEY (account_id, date))`,
   `CREATE TABLE IF NOT EXISTS schwab_transactions (activity_id TEXT PRIMARY KEY, account_number TEXT NOT NULL, time TEXT NOT NULL, json TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS schwab_transactions_account ON schwab_transactions (account_number, time)`,
+  `CREATE TABLE IF NOT EXISTS market_cache (key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS finnhub_cache (key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS oauth_tokens (provider TEXT PRIMARY KEY, access_token_enc TEXT NOT NULL, refresh_token_enc TEXT NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
 ];

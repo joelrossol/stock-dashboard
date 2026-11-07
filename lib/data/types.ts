@@ -1,7 +1,7 @@
 /** Normalized domain types. Every data source (mock or live) ends up here. */
 
 export type TaxTreatment = "taxable" | "tax-deferred" | "tax-free";
-export type AssetType = "EQUITY" | "ETF" | "OTHER";
+export type AssetType = "EQUITY" | "ETF" | "FUND" | "OTHER";
 
 export interface Account {
   id: string; // Schwab hash value

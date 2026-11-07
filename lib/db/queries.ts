@@ -1,9 +1,9 @@
 import "server-only";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { DEFAULT_THRESHOLDS, type Thresholds } from "@/lib/analytics/thresholds";
 import type { AccountOverrides } from "@/lib/data/schwab/normalize";
 import { getDb } from "./client";
-import { accountSnapshots, finnhubCache, oauthTokens, schwabTransactions, settings, signalSnoozes, symbolMutes, tradeNotes, watchlistItems, watchlists } from "./schema";
+import { accountSnapshots, finnhubCache, marketCache, oauthTokens, schwabTransactions, settings, signalSnoozes, symbolMutes, tradeNotes, watchlistItems, watchlists } from "./schema";
 
 export interface WatchlistItem {
   symbol: string;
@@ -231,4 +231,23 @@ export async function loadFinnhubCache(): Promise<Map<string, { json: string; fe
 export async function saveFinnhubCache(key: string, json: string, fetchedAt: number) {
   const db = await getDb();
   await db.insert(finnhubCache).values({ key, json, fetchedAt }).onConflictDoUpdate({ target: finnhubCache.key, set: { json, fetchedAt } });
+}
+
+export async function loadMarketCache(keys: string[]): Promise<Map<string, { json: string; fetchedAt: number }>> {
+  if (!keys.length) return new Map();
+  const db = await getDb();
+  const out = new Map<string, { json: string; fetchedAt: number }>();
+  for (let i = 0; i < keys.length; i += 200) {
+    const rows = await db.select().from(marketCache).where(inArray(marketCache.key, keys.slice(i, i + 200)));
+    for (const r of rows) out.set(r.key, { json: r.json, fetchedAt: r.fetchedAt });
+  }
+  return out;
+}
+
+export async function saveMarketCache(rows: { key: string; json: string; fetchedAt: number }[]) {
+  if (!rows.length) return;
+  const db = await getDb();
+  for (const r of rows) {
+    await db.insert(marketCache).values(r).onConflictDoUpdate({ target: marketCache.key, set: { json: r.json, fetchedAt: r.fetchedAt } });
+  }
 }

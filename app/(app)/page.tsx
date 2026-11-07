@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { AllocationBar } from "@/components/charts/AllocationBar";
-import { BreadthRing } from "@/components/charts/BreadthRing";
 import { Sparkline } from "@/components/charts/Sparkline";
-import { Treemap } from "@/components/charts/Treemap";
 import { SignalIcon } from "@/components/insights/SignalIcon";
+import { HeatmapCard } from "@/components/overview/HeatmapCard";
+import { ScorecardCard, type ScorecardData } from "@/components/overview/ScorecardCard";
 import { NetWorthCard } from "@/components/overview/NetWorthCard";
 import { Card, CardHeader, Chip, Delta, SEVERITY_TONE, Skeleton, Stat, toneClass } from "@/components/ui/primitives";
 import { getPageContext } from "@/lib/context";
 import { monthLabel } from "@/lib/dates";
 import { money, pct, pts, price, toneOf } from "@/lib/format";
+import type { PortfolioModel, RangeKey, RangeSeries } from "@/lib/model";
 import { netWorthSeries, upcomingEvents } from "@/lib/model";
 
 export default function OverviewPage() {
@@ -27,11 +28,10 @@ async function Overview() {
   const series = netWorthSeries(model);
   const events = upcomingEvents(model, watchSymbols);
   const h = model.holdings;
-  const breadth = h.map((x) => ({ symbol: x.symbol, pct: x.dayPct }));
-  const upCount = h.filter((x) => x.dayPct > 0).length;
-  const movers = [...h].sort((a, b) => Math.abs(b.dayPL) - Math.abs(a.dayPL)).slice(0, 5);
+  const scorecard = buildScorecard(model, series);
   const insights = model.groups.slice(0, 5);
-  const realizedWin = model.scorecard.winRate;
+  const accounts = [...model.accountSummaries].sort((a, b) => b.value - a.value);
+  const range = (k: RangeKey) => series.find((x) => x.key === k);
   const held = new Set(h.map((x) => x.symbol));
   const watchMovers = [...new Set(watchlists.flatMap((w) => w.items.map((i) => i.symbol)))]
     .filter((s) => !held.has(s) && data.quotes[s])
@@ -39,45 +39,93 @@ async function Overview() {
     .sort((a, b) => Math.abs(b.q.changePct) - Math.abs(a.q.changePct))
     .slice(0, 6);
   const cashPct = model.total > 0 ? model.cash / model.total : 0;
-  const yieldPct = model.total > 0 ? model.fwdDividends / model.invested : 0;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Day P&L" value={money(model.dayPL, { sign: true })} sub={pct(model.dayPct)} tone={toneOf(model.dayPL)} />
-        <Stat label="Unrealized" value={money(model.unrealized, { sign: true })} sub={`${pct(model.costBasis ? model.unrealized / model.costBasis : 0, { digits: 1 })} on cost`} tone={toneOf(model.unrealized)} />
-        <Stat label="YTD return" value={pct(model.ytd.twr, { digits: 1 })} sub={`S&P ${pct(model.ytd.bench, { digits: 1 })} · ${pts(model.ytd.twr - model.ytd.bench)}`} tone={toneOf(model.ytd.twr)} />
-        <Stat label="Realized YTD" value={money(model.realized.all, { sign: true })} sub={`Win rate ${Math.round(realizedWin * 100)}%`} />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <GrowthStat label="Past week" s={range("1W")} />
+        <GrowthStat label="Past month" s={range("1M")} />
+        <GrowthStat label="Past year" s={range("1Y")} />
+        <Stat label="Unrealized gain" value={money(model.unrealized, { sign: true })} sub={`${pct(model.costBasis ? model.unrealized / model.costBasis : 0, { digits: 1 })} on cost`} tone={toneOf(model.unrealized)} />
         <Stat label="Cash" value={money(model.cash)} sub={`${pct(cashPct, { digits: 1, sign: false })} of portfolio`} />
-        <Stat label="Fwd dividends" value={money(model.fwdDividends)} sub={`${pct(yieldPct, { digits: 1, sign: false })} yield · ${money(model.dividendsYtd)} YTD`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3 2xl:grid-cols-4">
-        <Card className="lg:col-span-2 2xl:col-span-2">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <NetWorthCard series={series} total={model.total} label={model.scopeLabel} />
         </Card>
-        <Card className="flex flex-col">
-          <CardHeader title="Today" right={`${h.length} holdings`} />
-          <div className="flex justify-center py-1">
-            <BreadthRing items={breadth} />
-          </div>
-          <div className="mb-1 mt-1 flex items-center justify-between text-[0.6875rem] text-fg-3">
-            <span>Biggest movers by $</span>
-            <span>
-              <span className="text-up">{upCount} up</span> · <span className="text-down">{h.length - upCount} down</span>
-            </span>
-          </div>
-          <div className="flex flex-col">
-            {movers.map((m) => (
-              <Link key={m.symbol} href={`/symbol/${m.symbol}`} className="flex items-center border-t border-line py-[0.3125rem] text-[0.75rem] hover:bg-white/[0.02]">
-                <span className="w-14 font-medium">{m.symbol}</span>
-                <Delta value={m.dayPct} digits={1} />
-                <span className={`ml-auto ${toneClass(m.dayPL)}`}>{money(m.dayPL, { sign: true })}</span>
-              </Link>
-            ))}
+        <Card>
+          <ScorecardCard data={scorecard} />
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+        <Card className="pb-1 lg:col-span-2">
+          <CardHeader title="Top holdings" right={<Link href="/holdings" className="hover:text-fg-2">All {h.length} holdings</Link>} />
+          <div className="-mx-3 overflow-x-auto px-3">
+            <table className="w-full min-w-[36rem] table-fixed text-[0.75rem]">
+              <colgroup>
+                <col className="w-[19%]" />
+                <col className="w-[12%]" />
+                <col className="w-[11%]" />
+                <col className="w-[9%]" />
+                <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                <col className="w-[9%]" />
+                <col className="w-[16%]" />
+              </colgroup>
+              <thead>
+                <tr className="text-[0.6562rem] text-fg-3">
+                  <th className="py-1 text-left font-normal">Symbol</th>
+                  <th className="text-center font-normal">30 days</th>
+                  <th className="text-right font-normal">Day $</th>
+                  <th className="text-right font-normal">Day %</th>
+                  <th className="text-right font-normal">Value</th>
+                  <th className="text-right font-normal">Weight</th>
+                  <th className="text-right font-normal">Gain</th>
+                  <th className="pr-1 text-right font-normal">Signal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {h.slice(0, 8).map((x) => (
+                  <tr key={x.symbol} className="border-t border-line">
+                    <td className="py-1.5">
+                      <Link href={`/symbol/${x.symbol}`} className="hover:underline">
+                        <div className="font-medium">{x.symbol}</div>
+                        <div className="truncate text-[0.6562rem] text-fg-3">{x.name}</div>
+                      </Link>
+                    </td>
+                    <td>
+                      <div className="flex justify-center">
+                        <Sparkline values={x.spark} />
+                      </div>
+                    </td>
+                    <td className={`text-right ${toneClass(x.dayPL)}`}>{money(x.dayPL, { sign: true })}</td>
+                    <td className="text-right">
+                      <Delta value={x.dayPct} digits={1} />
+                    </td>
+                    <td className="text-right">{money(x.marketValue)}</td>
+                    <td>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span>{pct(x.weight, { digits: 1, sign: false })}</span>
+                        <span className="h-1 w-7 overflow-hidden rounded-full bg-white/7">
+                          <span className="block h-full bg-accent" style={{ width: `${Math.min(100, x.weight * 400)}%` }} />
+                        </span>
+                      </div>
+                    </td>
+                    <td className="text-right">
+                      <Delta value={x.gainPct} digits={0} />
+                    </td>
+                    <td className="pr-1 text-right">
+                      {x.tags[0] ? <Chip tone={SEVERITY_TONE[x.tags[0].severity]}>{x.tags[0].tag}</Chip> : <Chip>{x.trendLabel}</Chip>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
-        <Card className="hidden 2xl:block">
+        <Card>
           <CardHeader title="Watchlist movers" right={<Link href="/watchlist">View all</Link>} />
           {watchMovers.map((w) => (
             <Link key={w.symbol} href={`/symbol/${w.symbol}`} className="flex items-center gap-2 border-t border-line py-2 text-[0.75rem] first:border-0 hover:bg-white/[0.02]">
@@ -117,10 +165,10 @@ async function Overview() {
           <AllocationBar
             legend={false}
             height={8}
-            segments={model.accountSummaries.map((a) => ({ label: a.account.name, value: a.value, color: a.account.color }))}
+            segments={accounts.map((a) => ({ label: a.account.name, value: a.value, color: a.account.color }))}
           />
           <div className="mt-1.5">
-            {model.accountSummaries.map((a) => (
+            {accounts.map((a) => (
               <div key={a.account.id} className="flex items-center gap-2.5 border-t border-line py-[0.4375rem]">
                 <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ background: a.account.color }} />
                 <div className="min-w-0 flex-1">
@@ -144,8 +192,7 @@ async function Overview() {
 
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader title="Heatmap" right="Size = value · color = today" />
-          <Treemap items={h.map((x) => ({ symbol: x.symbol, value: x.marketValue, changePct: x.dayPct }))} height={210} aspect={3.4} />
+          <HeatmapCard holdings={h.map((x) => ({ symbol: x.symbol, value: x.marketValue, dayPct: x.dayPct, dayPL: x.dayPL, weekPct: x.w1 }))} />
         </Card>
         <Card>
           <CardHeader title="Coming up" right="Next 14 days" />
@@ -168,80 +215,72 @@ async function Overview() {
         </Card>
       </div>
 
-      <Card className="pb-1">
-        <CardHeader title="Top holdings" right={<Link href="/holdings" className="hover:text-fg-2">All {h.length} holdings</Link>} />
-        <div className="-mx-3 overflow-x-auto px-3">
-          <table className="w-full min-w-[40rem] table-fixed text-[0.75rem]">
-            <colgroup>
-              <col className="w-[18%]" />
-              <col className="w-[12%]" />
-              <col className="w-[11%]" />
-              <col className="w-[9%]" />
-              <col className="w-[12%]" />
-              <col className="w-[13%]" />
-              <col className="w-[10%]" />
-              <col className="w-[15%]" />
-            </colgroup>
-            <thead>
-              <tr className="text-[0.6562rem] text-fg-3">
-                <th className="py-1 text-left font-normal">Symbol</th>
-                <th className="text-center font-normal">30 days</th>
-                <th className="text-right font-normal">Price</th>
-                <th className="text-right font-normal">Day</th>
-                <th className="text-right font-normal">Value</th>
-                <th className="text-right font-normal">Weight</th>
-                <th className="text-right font-normal">Gain</th>
-                <th className="pr-1 text-right font-normal">Signal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {h.slice(0, 8).map((x) => (
-                <tr key={x.symbol} className="border-t border-line">
-                  <td className="py-1.5">
-                    <Link href={`/symbol/${x.symbol}`} className="hover:underline">
-                      <div className="font-medium">{x.symbol}</div>
-                      <div className="truncate text-[0.6562rem] text-fg-3">{x.name}</div>
-                    </Link>
-                  </td>
-                  <td>
-                    <div className="flex justify-center">
-                      <Sparkline values={x.spark} />
-                    </div>
-                  </td>
-                  <td className="text-right">{price(x.price)}</td>
-                  <td className="text-right">
-                    <Delta value={x.dayPct} digits={1} />
-                  </td>
-                  <td className="text-right">{money(x.marketValue)}</td>
-                  <td>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <span>{pct(x.weight, { digits: 1, sign: false })}</span>
-                      <span className="h-1 w-7 overflow-hidden rounded-full bg-white/7">
-                        <span className="block h-full bg-accent" style={{ width: `${Math.min(100, x.weight * 400)}%` }} />
-                      </span>
-                    </div>
-                  </td>
-                  <td className="text-right">
-                    <Delta value={x.gainPct} digits={0} />
-                  </td>
-                  <td className="pr-1 text-right">
-                    {x.tags[0] ? <Chip tone={SEVERITY_TONE[x.tags[0].severity]}>{x.tags[0].tag}</Chip> : <Chip>{x.trendLabel}</Chip>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
+  );
+}
+
+function buildScorecard(model: PortfolioModel, series: RangeSeries[]): ScorecardData {
+  const periods = (["1D", "1W", "1M", "YTD"] as const)
+    .map((k) => series.find((x) => x.key === k))
+    .filter((x): x is RangeSeries => !!x)
+    .map((x) => ({ key: x.key, you: x.gainPct, spy: x.benchPct }));
+
+  const byPL = [...model.holdings].sort((a, b) => b.dayPL - a.dayPL);
+  const movers = {
+    winners: byPL.filter((x) => x.dayPL > 0).slice(0, 2).map((x) => ({ symbol: x.symbol, pl: x.dayPL })),
+    losers: byPL.filter((x) => x.dayPL < 0).reverse().slice(0, 2).map((x) => ({ symbol: x.symbol, pl: x.dayPL })),
+    gained: byPL.filter((x) => x.dayPL > 0).reduce((s, x) => s + x.dayPL, 0),
+    lost: byPL.filter((x) => x.dayPL < 0).reduce((s, x) => s + x.dayPL, 0),
+    up: byPL.filter((x) => x.dayPL > 0).length,
+    down: byPL.filter((x) => x.dayPL < 0).length,
+  };
+
+  // Drawdown on the time-weighted index, so deposits and withdrawals don't count as gains or losses.
+  const { twr, history } = model;
+  let peak = 0;
+  for (let i = 1; i < twr.length; i++) if (twr[i] >= twr[peak]) peak = i;
+  const lastI = twr.length - 1;
+  const recent = twr.slice(-253);
+  const underwater = recent.map((v, i) => v / Math.max(...recent.slice(0, i + 1)) - 1);
+  const high = {
+    drawdown: twr.length ? twr[lastI] / twr[peak] - 1 : 0,
+    peakDate: history[peak]?.date ?? model.data.asOf,
+    sessionsSince: Math.max(0, lastI - peak),
+    underwater,
+  };
+
+  const all = series.find((x) => x.key === "ALL");
+  const diffs = (all?.points ?? []).filter((p) => Number.isFinite(p.b)).map((p) => p.v - p.b);
+  const shadow =
+    all && diffs.length > 1
+      ? { ahead: model.total - (all.points.at(-1)?.b ?? model.total), since: history[0]?.date ?? model.data.asOf, diff: diffs }
+      : null;
+
+  return { periods, movers, high, shadow };
+}
+
+/** Dollar growth over a range (excluding deposits), with % and the S&P comparison. */
+function GrowthStat({ label, s }: { label: string; s: RangeSeries | undefined }) {
+  if (!s) return <Stat label={label} value="—" sub="Not enough history yet" />;
+  return (
+    <Stat
+      label={label}
+      value={money(s.gain, { sign: true })}
+      tone={toneOf(s.gain)}
+      sub={
+        <>
+          {pct(s.gainPct, { digits: 1 })} · vs S&amp;P <span className={toneClass(s.gainPct - s.benchPct)}>{pts(s.gainPct - s.benchPct)}</span>
+        </>
+      }
+    />
   );
 }
 
 function OverviewSkeleton() {
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }, (_, i) => (
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }, (_, i) => (
           <Skeleton key={i} className="h-[3.875rem]" />
         ))}
       </div>

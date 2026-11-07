@@ -209,7 +209,7 @@ async function SymbolDetail({ params }: { params: PageProps<"/symbol/[ticker]">[
                   [rec.strongBuy, "#5FA57D"],
                   [rec.buy, "#7DBF96"],
                   [rec.hold, "#5A5870"],
-                  [rec.sell, "#B48BD0"],
+                  [rec.sell, "#F16F6F"],
                   [rec.strongSell, "#9468B3"],
                 ].map(([n, c], i) => (
                   <div key={i} style={{ flex: n as number, background: c as string }} />

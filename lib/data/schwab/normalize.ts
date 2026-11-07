@@ -23,6 +23,7 @@ export function guessTaxTreatment(name: string): TaxTreatment {
 function assetTypeOf(assetType: string, type?: string): AssetType {
   if (assetType === "EQUITY") return "EQUITY";
   if (assetType === "COLLECTIVE_INVESTMENT" || type === "EXCHANGE_TRADED_FUND" || assetType === "ETF") return "ETF";
+  if (assetType === "MUTUAL_FUND" || assetType === "CASH_EQUIVALENT") return "FUND";
   return "OTHER";
 }
 
