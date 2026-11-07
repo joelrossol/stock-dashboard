@@ -8,6 +8,8 @@ import { money, pct, pts } from "@/lib/format";
 export interface ScorecardData {
   /** Your return vs the S&P 500 over a few ranges (fractions). */
   periods: { key: string; you: number; spy: number }[];
+  /** The trading session the day figures cover, e.g. "Fri Nov 6". */
+  session: string;
   movers: { winners: { symbol: string; pl: number }[]; losers: { symbol: string; pl: number }[]; gained: number; lost: number; up: number; down: number };
   /** Drawdown from the time-weighted high (deposits excluded). */
   high: { drawdown: number; peakDate: string; sessionsSince: number; underwater: number[] };
@@ -103,7 +105,7 @@ function MiniArea({ values, tone }: { values: number[]; tone: "up" | "down" }) {
 
 /** "Am I doing well?" Four small views of the same question. */
 export function ScorecardCard({ data }: { data: ScorecardData }) {
-  const { periods, movers, high, shadow } = data;
+  const { periods, movers, high, shadow, session } = data;
   const beating = periods.filter((p) => p.you > p.spy).length;
   const net = movers.gained + movers.lost;
   const gross = movers.gained - movers.lost || 1;
@@ -121,10 +123,10 @@ export function ScorecardCard({ data }: { data: ScorecardData }) {
           <PairedBars periods={periods} />
         </Panel>
 
-        <Panel title="Today: up vs down">
+        <Panel title={`Day's $ change · ${session}`}>
           <p className={`mt-1 text-[0.9375rem] font-medium leading-tight ${toneClass(net)}`}>{money(net, { sign: true })}</p>
-          <p className="text-[0.6562rem] text-fg-3">
-            <span className="text-up">{movers.up} up</span> · <span className="text-down">{movers.down} down</span>
+          <p className="text-[0.6562rem] leading-tight text-fg-3">
+            <span className="text-up">{movers.up} rose</span> · <span className="text-down">{movers.down} fell</span> · not total gain
           </p>
           <div className="mt-2 flex h-2 w-full gap-[2px] overflow-hidden rounded-full">
             <div className="bg-up" style={{ flex: Math.max(movers.gained, 0.0001) / gross }} />

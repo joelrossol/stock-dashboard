@@ -8,7 +8,7 @@ import { ScorecardCard, type ScorecardData } from "@/components/overview/Scoreca
 import { NetWorthCard } from "@/components/overview/NetWorthCard";
 import { Card, CardHeader, Chip, Delta, SEVERITY_TONE, Skeleton, Stat, toneClass } from "@/components/ui/primitives";
 import { getPageContext } from "@/lib/context";
-import { monthLabel } from "@/lib/dates";
+import { dayName, fmtDate, monthLabel } from "@/lib/dates";
 import { money, pct, pts, price, toneOf } from "@/lib/format";
 import type { PortfolioModel, RangeKey, RangeSeries } from "@/lib/model";
 import { netWorthSeries, upcomingEvents } from "@/lib/model";
@@ -256,7 +256,8 @@ function buildScorecard(model: PortfolioModel, series: RangeSeries[]): Scorecard
       ? { ahead: model.total - (all.points.at(-1)?.b ?? model.total), since: history[0]?.date ?? model.data.asOf, diff: diffs }
       : null;
 
-  return { periods, movers, high, shadow };
+  const session = `${dayName(model.data.asOf)} ${fmtDate(model.data.asOf, "short")}`;
+  return { periods, session, movers, high, shadow };
 }
 
 /** Dollar growth over a range (excluding deposits), with % and the S&P comparison. */

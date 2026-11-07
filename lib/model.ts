@@ -168,7 +168,14 @@ export function buildModel(
 function compute(data: PortfolioData, scope: Scope, t: Thresholds, suppression: Suppression, watchlists: Watchlist[]): PortfolioModel {
   const accounts = scope === "all" ? data.accounts : data.accounts.filter((a) => a.id === scope);
   const ids = new Set(accounts.map((a) => a.id));
-  const positions = data.positions.filter((p) => ids.has(p.accountId));
+  // Day $ = shares × today's price change. Schwab's own currentDayProfitLoss can swing
+  // wildly when shares were bought, sold, or moved between accounts that day.
+  const positions = data.positions
+    .filter((p) => ids.has(p.accountId))
+    .map((p) => {
+      const change = data.quotes[p.symbol]?.change;
+      return change != null && Number.isFinite(change) ? { ...p, dayPL: p.quantity * change } : p;
+    });
   const txns = data.transactions.filter((x) => ids.has(x.accountId));
   const close = makeCloseLookup(data.daily);
   const sessions = (data.daily.SPY ?? []).map((b) => b.date);
