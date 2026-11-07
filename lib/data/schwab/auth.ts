@@ -27,10 +27,19 @@ export interface SchwabConfig {
   callbackUrl: string;
 }
 
+/** Explicit SCHWAB_CALLBACK_URL, else the Vercel production domain, else local HTTPS. */
+function callbackUrlValue(): string {
+  const explicit = process.env.SCHWAB_CALLBACK_URL?.trim();
+  if (explicit) return explicit;
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (process.env.VERCEL && prod) return `https://${prod}/api/auth/schwab/callback`;
+  return "https://127.0.0.1:3000/api/auth/schwab/callback";
+}
+
 export function schwabConfig(): SchwabConfig | null {
   const appKey = process.env.SCHWAB_APP_KEY?.trim();
   const appSecret = process.env.SCHWAB_APP_SECRET?.trim();
-  const callbackUrl = process.env.SCHWAB_CALLBACK_URL?.trim() || "https://127.0.0.1:3000/api/auth/schwab/callback";
+  const callbackUrl = callbackUrlValue();
   if (!appKey || !appSecret) return null;
   return { appKey, appSecret, callbackUrl };
 }
@@ -140,7 +149,7 @@ export interface SchwabStatus {
 
 export async function schwabStatus(): Promise<SchwabStatus> {
   const c = schwabConfig();
-  const callbackUrl = c?.callbackUrl ?? process.env.SCHWAB_CALLBACK_URL ?? "https://127.0.0.1:3000/api/auth/schwab/callback";
+  const callbackUrl = c?.callbackUrl ?? callbackUrlValue();
   if (!c) return { configured: false, connected: false, expired: false, refreshExpiresAt: null, callbackUrl };
   const stored = await loadTokens();
   if (!stored) return { configured: true, connected: false, expired: false, refreshExpiresAt: null, callbackUrl };

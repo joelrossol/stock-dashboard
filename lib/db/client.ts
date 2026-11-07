@@ -1,7 +1,7 @@
 import "server-only";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { WATCHLIST_SEED } from "@/lib/data/mock/universe";
 import * as schema from "./schema";
@@ -18,6 +18,7 @@ const BOOTSTRAP = [
   `CREATE TABLE IF NOT EXISTS account_snapshots (account_id TEXT NOT NULL, date TEXT NOT NULL, value REAL NOT NULL, cash REAL, source TEXT NOT NULL, PRIMARY KEY (account_id, date))`,
   `CREATE TABLE IF NOT EXISTS schwab_transactions (activity_id TEXT PRIMARY KEY, account_number TEXT NOT NULL, time TEXT NOT NULL, json TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS schwab_transactions_account ON schwab_transactions (account_number, time)`,
+  `CREATE TABLE IF NOT EXISTS finnhub_cache (key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS oauth_tokens (provider TEXT PRIMARY KEY, access_token_enc TEXT NOT NULL, refresh_token_enc TEXT NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
 ];
 
@@ -25,15 +26,25 @@ export type DB = LibSQLDatabase<typeof schema>;
 
 let ready: Promise<DB> | null = null;
 
-function databaseUrl(): string {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+export function databaseInfo(): { url: string; kind: "remote" | "local" | "temporary" } {
+  const remote = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL;
+  if (remote) return { url: remote, kind: remote.startsWith("file:") ? "local" : "remote" };
+  if (process.env.VERCEL) {
+    // Vercel's filesystem is read-only except /tmp, which resets when the server restarts.
+    return { url: "file:/tmp/dashboard.db", kind: "temporary" };
+  }
   const dir = path.join(process.cwd(), "data");
   mkdirSync(dir, { recursive: true });
-  return `file:${path.join(dir, "dashboard.db")}`;
+  return { url: `file:${path.join(dir, "dashboard.db")}`, kind: "local" };
 }
 
 async function init(): Promise<DB> {
-  const client: Client = createClient({ url: databaseUrl(), authToken: process.env.DATABASE_AUTH_TOKEN });
+  const { url, kind } = databaseInfo();
+  if (kind === "temporary") console.warn("[db] No DATABASE_URL set: using a temporary database that resets on restart. Add Turso to keep data.");
+  const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+  // Remote databases use the fetch-based client (no native module needed on serverless).
+  const { createClient } = url.startsWith("file:") ? await import("@libsql/client") : await import("@libsql/client/web");
+  const client: Client = createClient({ url, authToken });
   await client.batch(BOOTSTRAP, "write");
   const count = await client.execute("SELECT COUNT(*) AS n FROM watchlists");
   if (Number(count.rows[0]?.n ?? 0) === 0) {

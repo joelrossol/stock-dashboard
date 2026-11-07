@@ -3,7 +3,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { DEFAULT_THRESHOLDS, type Thresholds } from "@/lib/analytics/thresholds";
 import type { AccountOverrides } from "@/lib/data/schwab/normalize";
 import { getDb } from "./client";
-import { accountSnapshots, oauthTokens, schwabTransactions, settings, signalSnoozes, symbolMutes, tradeNotes, watchlistItems, watchlists } from "./schema";
+import { accountSnapshots, finnhubCache, oauthTokens, schwabTransactions, settings, signalSnoozes, symbolMutes, tradeNotes, watchlistItems, watchlists } from "./schema";
 
 export interface WatchlistItem {
   symbol: string;
@@ -220,4 +220,15 @@ export async function getDataModePref(): Promise<DataModePref | null> {
 
 export async function setDataModePref(mode: DataModePref) {
   await writeSetting("data_mode", mode);
+}
+
+export async function loadFinnhubCache(): Promise<Map<string, { json: string; fetchedAt: number }>> {
+  const db = await getDb();
+  const rows = await db.select().from(finnhubCache);
+  return new Map(rows.map((r) => [r.key, { json: r.json, fetchedAt: r.fetchedAt }]));
+}
+
+export async function saveFinnhubCache(key: string, json: string, fetchedAt: number) {
+  const db = await getDb();
+  await db.insert(finnhubCache).values({ key, json, fetchedAt }).onConflictDoUpdate({ target: finnhubCache.key, set: { json, fetchedAt } });
 }

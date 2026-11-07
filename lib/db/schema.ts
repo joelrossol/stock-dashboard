@@ -70,3 +70,10 @@ export const schwabTransactions = sqliteTable("schwab_transactions", {
   time: text("time").notNull(),
   json: text("json").notNull(),
 });
+
+/** Phase 3: cached Finnhub responses (profiles, ratings, news, earnings). */
+export const finnhubCache = sqliteTable("finnhub_cache", {
+  key: text("key").primaryKey(),
+  json: text("json").notNull(),
+  fetchedAt: integer("fetched_at").notNull(),
+});

@@ -4,10 +4,11 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 /** AES-256-GCM with a key derived from TOKEN_ENCRYPTION_KEY. Output: iv.tag.ciphertext (base64url). */
 function key(): Buffer {
   const raw = process.env.TOKEN_ENCRYPTION_KEY;
-  if (!raw || raw.length < 16) {
-    throw new Error("TOKEN_ENCRYPTION_KEY is missing or too short. Add one to .env.local (openssl rand -base64 32).");
-  }
-  return createHash("sha256").update(raw).digest();
+  if (raw && raw.length >= 16) return createHash("sha256").update(raw).digest();
+  // Fallback: a separate key derived from AUTH_SECRET, so hosting needs one less secret.
+  const auth = process.env.AUTH_SECRET;
+  if (auth && auth.length >= 32) return createHash("sha256").update(`token-encryption:${auth}`).digest();
+  throw new Error("Set TOKEN_ENCRYPTION_KEY or AUTH_SECRET (openssl rand -base64 32).");
 }
 
 export function encrypt(plain: string): string {

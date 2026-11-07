@@ -26,11 +26,40 @@ const SECTOR_OF_INDUSTRY: Record<string, string> = {
   "Road & Rail": "Industrials",
   Machinery: "Industrials",
   ETF: "Broad market",
+  Communications: "Communication",
+  "Diversified Consumer Services": "Consumer",
+  "Textiles, Apparel & Luxury Goods": "Consumer",
+  "Leisure Products": "Consumer",
+  "Auto Components": "Consumer",
+  Distributors: "Consumer",
+  "Consumer products": "Staples",
+  Tobacco: "Staples",
+  "Food & Staples Retailing": "Staples",
+  "Life Sciences Tools & Services": "Health Care",
+  "Health Care Equipment & Supplies": "Health Care",
+  "Health Care Providers & Services": "Health Care",
+  Airlines: "Industrials",
+  "Logistics & Transportation": "Industrials",
+  "Electrical Equipment": "Industrials",
+  "Industrial Conglomerates": "Industrials",
+  "Professional Services": "Industrials",
+  "Commercial Services & Supplies": "Industrials",
+  Construction: "Industrials",
+  Building: "Industrials",
+  "Trading Companies & Distributors": "Industrials",
+  Marine: "Industrials",
+  Chemicals: "Materials",
+  "Metals & Mining": "Materials",
+  Packaging: "Materials",
+  "Real Estate": "Real Estate",
+  Utilities: "Utilities",
+  "Oil & Gas": "Energy",
+  "Capital Markets": "Financials",
 };
 
 export function sectorOf(industry: string | undefined): string {
   if (!industry) return "Other";
-  return SECTOR_OF_INDUSTRY[industry] ?? industry;
+  return SECTOR_OF_INDUSTRY[industry.trim()] ?? industry.trim();
 }
 
 const EarningsSchema = z.object({

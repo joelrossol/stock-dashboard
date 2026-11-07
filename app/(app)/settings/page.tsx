@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { Card, CardHeader, Chip, PageHeader, Skeleton } from "@/components/ui/primitives";
 import { DEFAULT_THRESHOLDS, THRESHOLD_FIELDS } from "@/lib/analytics/thresholds";
 import { getPageContext } from "@/lib/context";
+import { databaseInfo } from "@/lib/db/client";
 import { fmtDate } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -26,6 +27,8 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
   const [{ data, settings, schwabExpiresInMs }, sp, h] = await Promise.all([getPageContext(), searchParams, headers()]);
   const here = `${h.get("x-forwarded-proto") ?? (h.get("host")?.startsWith("127.0.0.1") ? "https" : "http")}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const conn = data.connection;
+  const finnhubOn = !!process.env.FINNHUB_API_KEY?.trim();
+  const db = databaseInfo();
   const st = conn.status;
   const justConnected = sp.connected === "1";
   const error = typeof sp.schwab_error === "string" ? sp.schwab_error : null;
@@ -115,10 +118,14 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
           )}
         </Card>
         <Card>
-          <CardHeader title="Finnhub" right={<Chip tone="warn">Sample data</Chip>} />
+          <CardHeader title="Finnhub" right={finnhubOn ? <Chip tone="up">Key added</Chip> : <Chip tone="warn">No key</Chip>} />
           <p className="text-[0.75rem] text-fg-2">Fills what Schwab doesn&apos;t provide: earnings dates, analyst ratings, sectors, and company news.</p>
           <p className="mt-2 text-[0.7188rem] text-fg-3">
-            Add a free key as <code className="text-fg-2">FINNHUB_API_KEY</code> in Phase 3. The free tier allows about 60 calls a minute; results are cached daily.
+            {finnhubOn
+              ? data.mode === "live"
+                ? "Used with live data. Results are cached (profiles weekly, ratings daily, news hourly) to stay inside the free tier, so the first load fills in over a minute or two."
+                : "Ready. It's used once live Schwab data is on; sample data has its own built-in reference data."
+              : "Add a free key from finnhub.io as FINNHUB_API_KEY. Without it, live data has no earnings dates, ratings, news, or sectors."}
           </p>
         </Card>
         <Card>
@@ -129,7 +136,9 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
             <dt className="text-fg-3">As of</dt>
             <dd>{fmtDate(data.asOf, "long")}</dd>
             <dt className="text-fg-3">Database</dt>
-            <dd>{process.env.DATABASE_URL ? "Turso (remote)" : "Local file · data/dashboard.db"}</dd>
+            <dd className={db.kind === "temporary" ? "text-warn" : ""}>
+              {db.kind === "remote" ? "Turso (hosted)" : db.kind === "temporary" ? "Temporary: resets on restart. Add Turso." : "Local file · data/dashboard.db"}
+            </dd>
             <dt className="text-fg-3">History</dt>
             <dd className="text-fg-3">{data.mode === "live" ? `${data.transactions.length} transactions stored · daily snapshots on` : "Sample ledger"}</dd>
           </dl>

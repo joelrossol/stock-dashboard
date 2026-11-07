@@ -63,6 +63,14 @@ The sample source returns raw JSON in Schwab's own format and runs through the s
 
 Signals are mechanical rules with transparent thresholds (Settings → Signal thresholds). They're not investment advice.
 
+## Hosting on Vercel
+
+Required environment variables: `AUTH_EMAIL`, `AUTH_PASSWORD_HASH`, `AUTH_SECRET` (the login), plus `SCHWAB_APP_KEY`, `SCHWAB_APP_SECRET`, and optionally `FINNHUB_API_KEY`. Everything else has a fallback:
+
+- **Database:** set `DATABASE_URL` + `DATABASE_AUTH_TOKEN`, or add Turso from Vercel → Storage (its `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` are read automatically). Without one, a temporary database is used that resets on restart, which means reconnecting Schwab often.
+- **Token encryption:** `TOKEN_ENCRYPTION_KEY`, or a key derived from `AUTH_SECRET`.
+- **Schwab callback:** `SCHWAB_CALLBACK_URL`, or `https://<production domain>/api/auth/schwab/callback`. Add that exact URL to your Schwab app.
+
 ## Login
 
 The whole app sits behind an email and password login. A server-side proxy turns away anyone without a valid session before any page, API route, or action runs, and every data load and action checks the session again. Sessions are signed cookies (HttpOnly, Secure). They end after 12 hours idle or 7 days total. Five wrong passwords lock sign-in for 15 minutes. The site sends noindex headers and a disallow-all `robots.txt`.

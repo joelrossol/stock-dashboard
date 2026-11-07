@@ -8,6 +8,8 @@
  */
 import "server-only";
 import { addDays, etDate, etToEpoch, isWeekend, sessionOnOrBefore } from "@/lib/dates";
+import { after } from "next/server";
+import { createLiveFinnhubSource } from "@/lib/data/finnhub/client";
 import { createEmptyFinnhubSource } from "@/lib/data/finnhub/empty";
 import { normalizeEarnings, normalizeNews, normalizeProfile, normalizeRecommendations } from "@/lib/data/finnhub/normalize";
 import { createMockFinnhubSource } from "@/lib/data/mock/finnhub-source";
@@ -144,7 +146,7 @@ async function reference(
         industry: isEtf ? "ETF" : known ? prof.industry : "Unclassified",
         marketCap: prof.marketCap,
       };
-      if (!isEtf) recommendations[s] = normalizeRecommendations(await finnhub.recommendations(s));
+      if (!isEtf && held.has(s)) recommendations[s] = normalizeRecommendations(await finnhub.recommendations(s));
       if (held.has(s) && !isEtf) news.push(...normalizeNews(await finnhub.news(s, addDays(asOf, -7), asOf), s));
     }),
   );
@@ -209,7 +211,6 @@ function patchToday(bars: Bar[], q: RawQuote | undefined): Bar[] {
 
 async function buildLive(overrides: AccountOverrides, extraSymbols: string[], conn: { requested: Connection["requested"]; status: SchwabStatus }): Promise<PortfolioData> {
   const schwab = createLiveSchwabSource();
-  const finnhub = createEmptyFinnhubSource();
 
   const [nums, prefs, accts] = await Promise.all([schwab.accountNumbers(), schwab.userPreference(), schwab.accounts()]);
   const { accounts, positions } = normalizeAccounts(nums, prefs, accts, overrides);
@@ -254,8 +255,19 @@ async function buildLive(overrides: AccountOverrides, extraSymbols: string[], co
   await upsertSnapshots(accounts.map((a) => ({ accountId: a.id, date: asOf, value: a.liquidationValue, cash: a.cash, source: "snapshot" })));
   const snapshots = await listSnapshots();
 
-  const { instruments, recommendations, news } = await reference(finnhub, symbols, quotes, positions, held, asOf, etfHint);
+  const finnhubKey = process.env.FINNHUB_API_KEY?.trim();
+  const live = finnhubKey ? createLiveFinnhubSource(finnhubKey, { budgetMs: 2500, symbols }) : null;
+  const finnhub = live ?? createEmptyFinnhubSource();
+  // Earnings first: one call covers every symbol.
   const earnings = normalizeEarnings(await finnhub.earningsCalendar(asOf, addDays(asOf, 90)));
+  const { instruments, recommendations, news } = await reference(finnhub, symbols, quotes, positions, held, asOf, etfHint);
+  if (live) {
+    try {
+      after(() => live.drain()); // finish anything that didn't fit in this request's time budget
+    } catch {
+      void live.drain();
+    }
+  }
 
   return {
     mode: "live",
