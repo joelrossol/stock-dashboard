@@ -16,13 +16,36 @@ export interface Session {
   seen: number; // last activity (ms)
 }
 
+/** Reads an env var, ignoring surrounding whitespace and quotes that sneak in when pasting into dashboards. */
+export function envValue(name: string): string {
+  return (process.env[name] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+}
+
 function secret(): string | null {
-  const s = process.env.AUTH_SECRET;
-  return s && s.length >= 32 ? s : null;
+  const s = envValue("AUTH_SECRET");
+  return s.length >= 32 ? s : null;
+}
+
+export const authEmail = () => envValue("AUTH_EMAIL").toLowerCase();
+export const authPasswordHash = () => envValue("AUTH_PASSWORD_HASH");
+
+/** What's wrong with the login setup, by variable name only (never values). Empty = ready. */
+export function authProblems(): string[] {
+  const problems: string[] = [];
+  const email = authEmail();
+  const hash = authPasswordHash();
+  const sec = envValue("AUTH_SECRET");
+  if (!email) problems.push("AUTH_EMAIL is missing");
+  else if (!/^[^@\s]+@[^@\s]+$/.test(email)) problems.push("AUTH_EMAIL isn't an email address");
+  if (!hash) problems.push("AUTH_PASSWORD_HASH is missing");
+  else if (!/^scrypt:\d+:\d+:\d+:[\w-]+:[\w-]+$/.test(hash)) problems.push("AUTH_PASSWORD_HASH isn't a password hash (it should start with \"scrypt:\"; paste the value from .env.local, not your password)");
+  if (!sec) problems.push("AUTH_SECRET is missing");
+  else if (sec.length < 32) problems.push(`AUTH_SECRET is too short (${sec.length} characters; needs 32+)`);
+  return problems;
 }
 
 export function authConfigured(): boolean {
-  return !!(secret() && process.env.AUTH_EMAIL && process.env.AUTH_PASSWORD_HASH);
+  return authProblems().length === 0;
 }
 
 const sign = (data: string, key: string) => createHmac("sha256", key).update(data).digest("base64url");
@@ -44,7 +67,7 @@ export function decodeSession(token: string | undefined, now = Date.now()): Sess
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
   try {
     const s = JSON.parse(Buffer.from(body, "base64url").toString()) as Session;
-    if (s.sub?.toLowerCase() !== process.env.AUTH_EMAIL?.toLowerCase()) return null; // email changed → old sessions end
+    if (s.sub?.toLowerCase() !== authEmail()) return null; // email changed → old sessions end
     if (now - s.seen > IDLE_MS || now - s.iat > MAX_MS) return null;
     return s;
   } catch {

@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifyPassword } from "@/lib/auth/password";
-import { authConfigured, cookieOptions, encodeSession, SESSION_COOKIE } from "@/lib/auth/session";
+import { authEmail, authPasswordHash, authProblems, cookieOptions, encodeSession, SESSION_COOKIE } from "@/lib/auth/session";
 import { readSetting, writeSetting } from "@/lib/db/queries";
 
 const WINDOW_MS = 15 * 60 * 1000;
@@ -25,15 +25,19 @@ function safeNext(raw: FormDataEntryValue | null): string {
 }
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
-  if (!authConfigured()) return { error: "Login isn't set up yet. Run npm run set-password on the server." };
+  const problems = authProblems();
+  if (problems.length) {
+    const where = process.env.VERCEL ? `Fix in Vercel → Settings → Environment Variables (Production), then redeploy` : "Run npm run set-password, then restart the server";
+    return { error: `Login isn't set up: ${problems.join("; ")}. ${where}.` };
+  }
   const now = Date.now();
   const lock = await readSetting<Lock>("login_lock", { fails: 0, first: 0, until: 0 });
   if (lock.until > now) return { error: `Too many attempts. Try again in ${Math.ceil((lock.until - now) / 60_000)} minutes.` };
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const passwordOk = verifyPassword(password, process.env.AUTH_PASSWORD_HASH!); // always run, so timing doesn't reveal the email
-  const ok = passwordOk && email === process.env.AUTH_EMAIL!.toLowerCase();
+  const passwordOk = verifyPassword(password, authPasswordHash()); // always run, so timing doesn't reveal the email
+  const ok = passwordOk && email === authEmail();
 
   if (!ok) {
     const fresh = now - lock.first > WINDOW_MS;
