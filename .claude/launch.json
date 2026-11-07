@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000,
+      "url": "https://127.0.0.1:3000",
+      "autoPort": false
+    },
+    {
+      "name": "dashboard-http",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:http"
+      ],
+      "port": 3001
+    }
+  ]
+}

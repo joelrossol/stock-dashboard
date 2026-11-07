@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks commits that include secret files or values from .env.local (see scripts/check-secrets.mjs).
+exec node scripts/check-secrets.mjs
