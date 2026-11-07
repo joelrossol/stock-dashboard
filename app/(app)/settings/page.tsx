@@ -30,6 +30,8 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
   const here = `${h.get("x-forwarded-proto") ?? (h.get("host")?.startsWith("127.0.0.1") ? "https" : "http")}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const conn = data.connection;
   const finnhubOn = !!readEnv(ENV_NAMES.finnhub).value;
+  const hosted = !!process.env.VERCEL;
+  const missingKeys = [!readEnv(ENV_NAMES.schwabKey).value && "SCHWAB_APP_KEY", !readEnv(ENV_NAMES.schwabSecret).value && "SCHWAB_APP_SECRET"].filter(Boolean) as string[];
   const db = databaseInfo();
   const st = conn.status;
   const justConnected = sp.connected === "1";
@@ -39,7 +41,9 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
   const wrongOrigin = st?.configured && data.mode !== "live" && here !== callbackOrigin;
   const selected: "live" | "mock" = conn.requested === "mock" ? "mock" : "live";
   const liveNote = !st?.configured
-    ? "Add your Schwab keys to .env.local first"
+    ? hosted
+      ? "Add your Schwab keys in Vercel's environment variables first"
+      : "Add your Schwab keys to .env.local first"
     : st.expired
       ? "Schwab login expired; reconnect below"
       : "Connect Schwab below to switch on";
@@ -107,16 +111,25 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
                   <code className="mt-1 block break-all rounded-md border border-line bg-bg px-2 py-1 text-[0.6875rem] text-fg-2">{callback}</code>
                 </li>
                 <li className={st?.configured ? "text-up" : ""}>
-                  Put your App Key and Secret in <code className="text-fg-2">.env.local</code>, then restart with <code className="text-fg-2">npm run dev</code>.{st?.configured ? " Done." : ""}
+                  {hosted ? (
+                    <>
+                      Add <code className="text-fg-2">SCHWAB_APP_KEY</code> and <code className="text-fg-2">SCHWAB_APP_SECRET</code> in Vercel → Settings → Environment Variables (Production), then redeploy.
+                    </>
+                  ) : (
+                    <>
+                      Put your App Key and Secret in <code className="text-fg-2">.env.local</code>, then restart with <code className="text-fg-2">npm run dev</code>.
+                    </>
+                  )}
+                  {st?.configured ? " Done." : ""}
                 </li>
-                <li>Open the app at https://127.0.0.1:3000 and connect below. You&apos;ll sign in on Schwab&apos;s own site.</li>
+                <li>{hosted ? "Connect below." : "Open the app at https://127.0.0.1:3000 and connect below."} You&apos;ll sign in on Schwab&apos;s own site.</li>
               </ol>
               {st?.configured ? (
                 <a href="/api/auth/schwab/login" className={`${btn} mt-3 inline-block`}>
                   {st.expired ? "Reconnect Schwab" : "Connect Schwab"}
                 </a>
               ) : (
-                <p className="mt-3 text-[0.7188rem] text-fg-3">{conn.requested === "mock" ? "DATA_MODE=mock is set, so sample data is forced." : "Waiting for the App Key and Secret."}</p>
+                <p className="mt-3 text-[0.7188rem] text-fg-3">{conn.requested === "mock" ? "DATA_MODE=mock is set, so sample data is forced." : `Waiting for ${missingKeys.join(" and ")}. See Server configuration above.`}</p>
               )}
             </>
           )}
