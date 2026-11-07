@@ -13,7 +13,7 @@ describe("hosting fallbacks", () => {
     const { databaseInfo } = await import("@/lib/db/client");
     expect(databaseInfo().kind).toBe("temporary");
     vi.stubEnv("TURSO_DATABASE_URL", "libsql://example-db.turso.io");
-    expect(databaseInfo()).toEqual({ url: "libsql://example-db.turso.io", kind: "remote" });
+    expect(databaseInfo()).toMatchObject({ url: "libsql://example-db.turso.io", kind: "remote" });
   });
 
   it("derives the Schwab callback from the Vercel production domain", async () => {
@@ -43,5 +43,17 @@ describe("env name aliases", () => {
     const { readEnv, ENV_NAMES } = await import("@/lib/env");
     expect(readEnv(ENV_NAMES.schwabKey)).toEqual({ value: "abc123", name: "Client_ID" });
     expect(readEnv(ENV_NAMES.schwabSecret)).toEqual({ value: "shh", name: "Client_Secret" });
+  });
+});
+
+describe("Turso with a custom Vercel prefix", () => {
+  it("finds the libsql URL and its matching token under any prefix", async () => {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("TURSO_DATABASE_URL", "");
+    vi.stubEnv("STOCKS_TURSO_DATABASE_URL", "libsql://stocks-me.turso.io");
+    vi.stubEnv("STOCKS_TURSO_AUTH_TOKEN", "tok123");
+    const { databaseInfo } = await import("@/lib/db/client");
+    expect(databaseInfo()).toEqual({ url: "libsql://stocks-me.turso.io", token: "tok123", kind: "remote" });
   });
 });

@@ -26,9 +26,30 @@ export type DB = LibSQLDatabase<typeof schema>;
 
 let ready: Promise<DB> | null = null;
 
-export function databaseInfo(): { url: string; kind: "remote" | "local" | "temporary" } {
-  const remote = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL;
-  if (remote) return { url: remote, kind: remote.startsWith("file:") ? "local" : "remote" };
+/**
+ * Finds the database URL and token: DATABASE_URL / TURSO_DATABASE_URL first,
+ * then any variable holding a libsql:// address (covers Vercel's custom
+ * prefixes), paired with the token variable that shares its prefix.
+ */
+function findDatabaseEnv(): { url: string; token?: string } | null {
+  const env = process.env;
+  const val = (k: string) => (env[k] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2");
+  for (const [u, t] of [
+    ["DATABASE_URL", "DATABASE_AUTH_TOKEN"],
+    ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"],
+  ]) {
+    if (val(u)) return { url: val(u), token: val(t) || val("TURSO_AUTH_TOKEN") || val("DATABASE_AUTH_TOKEN") || undefined };
+  }
+  const urlKey = Object.keys(env).find((k) => /URL$/i.test(k) && /^libsql:\/\//.test(val(k)));
+  if (!urlKey) return null;
+  const prefix = urlKey.replace(/(TURSO_)?(DATABASE_)?URL$/i, "");
+  const tokenKey = [`${prefix}TURSO_AUTH_TOKEN`, `${prefix}DATABASE_AUTH_TOKEN`, `${prefix}AUTH_TOKEN`, `${prefix}TOKEN`].find((k) => val(k));
+  return { url: val(urlKey), token: tokenKey ? val(tokenKey) : undefined };
+}
+
+export function databaseInfo(): { url: string; kind: "remote" | "local" | "temporary"; token?: string } {
+  const found = findDatabaseEnv();
+  if (found) return { url: found.url, token: found.token, kind: found.url.startsWith("file:") ? "local" : "remote" };
   if (process.env.VERCEL) {
     // Vercel's filesystem is read-only except /tmp, which resets when the server restarts.
     return { url: "file:/tmp/dashboard.db", kind: "temporary" };
@@ -39,9 +60,8 @@ export function databaseInfo(): { url: string; kind: "remote" | "local" | "tempo
 }
 
 async function init(): Promise<DB> {
-  const { url, kind } = databaseInfo();
+  const { url, kind, token: authToken } = databaseInfo();
   if (kind === "temporary") console.warn("[db] No DATABASE_URL set: using a temporary database that resets on restart. Add Turso to keep data.");
-  const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
   // Remote databases use the fetch-based client (no native module needed on serverless).
   const { createClient } = url.startsWith("file:") ? await import("@libsql/client") : await import("@libsql/client/web");
   const client: Client = createClient({ url, authToken });

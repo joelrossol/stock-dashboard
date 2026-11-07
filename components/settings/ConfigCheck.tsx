@@ -23,6 +23,7 @@ export function ConfigCheck() {
     { label: "Schwab callback URL", state: "ok", detail: callbackUrl() },
   ];
   const similar = similarEnvNames([key.name, secret.name, finnhub.name, "AUTH_EMAIL", "AUTH_PASSWORD_HASH", "AUTH_SECRET"]);
+  if (db.kind === "remote" && !db.token) rows.splice(5, 0, { label: "Database token", state: "missing", detail: "Found the Turso URL but no auth token next to it" });
   const missing = rows.filter((r) => r.state === "missing").length;
   const icon = (s: State) =>
     s === "ok" ? <CheckCircle2 size={16} className="text-up" /> : s === "missing" ? <CircleAlert size={16} className="text-down" /> : <CircleDashed size={16} className="text-warn" />;
