@@ -183,7 +183,15 @@ function TradeDetail({ t, markers }: { t: TradeRow; markers: TradeMarker[] }) {
 
             <Card>
               {bars ? (
-                <PriceChart bars={bars} markers={markers} height={238} compact initialRange={pickRange(t.date)} focusDate={t.date} />
+                <PriceChart
+                  bars={bars}
+                  markers={markers}
+                  height={238}
+                  compact
+                  initialRange={pickRange([t.date, ...t.lots.map((l) => l.buyDate)].sort()[0])}
+                  focusDate={t.date}
+                  highlight={[{ date: t.date, side: t.side }, ...t.lots.map((l) => ({ date: l.buyDate, side: "BUY" as const }))]}
+                />
               ) : (
                 <div className="h-[13.75rem] animate-pulse rounded-lg bg-card-2/50" />
               )}

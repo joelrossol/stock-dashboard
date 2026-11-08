@@ -19,7 +19,7 @@ const RANGE_TEXT: Record<RangeKey, string> = {
 };
 
 export function NetWorthCard({ series, total, label, height = 262 }: { series: RangeSeries[]; total: number; label: string; height?: number }) {
-  const [key, setKey] = useState<RangeKey>("1D");
+  const [key, setKey] = useState<RangeKey>("YTD");
   const s = series.find((x) => x.key === key) ?? series[0];
   if (!s) return null;
   const up = s.gain >= 0;

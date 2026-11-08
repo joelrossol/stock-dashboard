@@ -50,6 +50,7 @@ export function PriceChart({
   initialRange = "1Y",
   compact = false,
   focusDate,
+  highlight,
 }: {
   bars: PriceBar[];
   markers?: TradeMarker[];
@@ -57,6 +58,8 @@ export function PriceChart({
   initialRange?: (typeof RANGES)[number][0];
   compact?: boolean;
   focusDate?: string;
+  /** Trades to emphasize (e.g. this sell and the buys it closed); others are dimmed. */
+  highlight?: { date: string; side: "BUY" | "SELL" }[];
 }) {
   const [range, setRange] = useState<(typeof RANGES)[number][0]>(initialRange);
   const [shown, setShown] = useState<Record<number, boolean>>({ 20: false, 50: !compact, 200: !compact });
@@ -117,7 +120,22 @@ export function PriceChart({
   const up = (view.at(-1)?.close ?? 0) >= (view[0]?.close ?? 0);
   const color = up ? C.up : C.down;
   const dateIndex = new Map(view.map((b, i) => [b.date, i]));
-  const visibleMarkers = markers.filter((m) => dateIndex.has(m.date));
+  // One marker per day and side: same-day fills (or lots in different accounts) merge, at their average price.
+  const visibleMarkers = [
+    ...markers
+      .filter((m) => dateIndex.has(m.date))
+      .reduce((acc, m) => {
+        const k = `${m.date}|${m.side}`;
+        const prev = acc.get(k);
+        if (!prev) acc.set(k, { ...m });
+        else {
+          const qty = prev.qty + m.qty;
+          acc.set(k, { ...prev, qty, price: (prev.price * prev.qty + m.price * m.qty) / qty, account: prev.account === m.account ? prev.account : "several accounts" });
+        }
+        return acc;
+      }, new Map<string, TradeMarker>())
+      .values(),
+  ];
   const focusIdx = focusDate ? dateIndex.get(focusDate) : undefined;
   const hb = hover != null ? view[hover] : null;
   const barW = geo ? Math.max(1, Math.min(8, ((width - padR) / n) * 0.65)) : 1;
@@ -220,18 +238,39 @@ export function PriceChart({
               view.map((b, i) => (
                 <rect key={b.date} x={geo.x(i) - barW / 2} y={height - geo.vy(b.volume)} width={barW} height={geo.vy(b.volume)} fill="rgba(255,255,255,0.08)" rx={1} />
               ))}
-            {visibleMarkers.map((m, k) => {
-              const i = dateIndex.get(m.date)!;
-              const cx = geo.x(i);
-              const cy = geo.y(m.price);
-              const buy = m.side === "BUY";
-              const path = buy ? `M${cx},${cy + 4} l5,9 l-10,0 z` : `M${cx},${cy - 4} l5,-9 l-10,0 z`;
-              return (
-                <path key={k} d={path} fill={buy ? C.up : C.down} stroke={C.card} strokeWidth={1}>
-                  <title>{`${buy ? "Bought" : "Sold"} ${m.qty} @ ${price(m.price)}${m.account ? ` · ${m.account}` : ""} · ${fmtDate(m.date)}`}</title>
-                </path>
-              );
-            })}
+            {(() => {
+              // Label each trade arrow ("Buy $182") on its outer side, stacking labels that would collide.
+              const placed: { x: number; side: string; level: number }[] = [];
+              const isHi = (m: TradeMarker) => !highlight || highlight.some((h) => h.date === m.date && h.side === m.side);
+              return [...visibleMarkers]
+                .sort((a, b) => Number(isHi(a)) - Number(isHi(b)) || a.date.localeCompare(b.date))
+                .map((m, k) => {
+                  const i = dateIndex.get(m.date)!;
+                  const cx = geo.x(i);
+                  const cy = geo.y(m.price);
+                  const buy = m.side === "BUY";
+                  const hi = isHi(m);
+                  const path = buy ? `M${cx},${cy + 4} l5,9 l-10,0 z` : `M${cx},${cy - 4} l5,-9 l-10,0 z`;
+                  const text = `${buy ? "Buy" : "Sell"} ${price(m.price).replace(/\.\d+$/, "")}`;
+                  const w = text.length * 6.4 + 10;
+                  const level = placed.filter((p) => p.side === m.side && Math.abs(p.x - cx) < w).reduce((mx, p) => Math.max(mx, p.level + 1), 0);
+                  placed.push({ x: cx, side: m.side, level });
+                  const off = 16 + level * 17;
+                  const ly = Math.min(plotH - 16, Math.max(1, buy ? cy + off : cy - off - 15));
+                  const lx = Math.min(width - padR - w - 1, Math.max(1, cx - w / 2));
+                  const fill = buy ? C.up : C.down;
+                  return (
+                    <g key={k} opacity={hi ? 1 : 0.4}>
+                      <title>{`${buy ? "Bought" : "Sold"} ${m.qty} @ ${price(m.price)}${m.account ? ` · ${m.account}` : ""} · ${fmtDate(m.date)}`}</title>
+                      <path d={path} fill={fill} stroke={C.card} strokeWidth={1} />
+                      <rect x={lx} y={ly} width={w} height={15} rx={4} fill={C.card2} stroke={fill} strokeOpacity={0.6} />
+                      <text x={lx + w / 2} y={ly + 11} textAnchor="middle" fontSize={11} fontWeight={500} fill={fill}>
+                        {text}
+                      </text>
+                    </g>
+                  );
+                });
+            })()}
             {hb && hover != null && (
               <g pointerEvents="none">
                 <line x1={geo.x(hover)} x2={geo.x(hover)} y1={0} y2={plotH} stroke="rgba(255,255,255,0.2)" />
