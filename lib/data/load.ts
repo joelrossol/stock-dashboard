@@ -7,13 +7,14 @@
  * back to sample data with a notice when you aren't.
  */
 import "server-only";
-import { addDays, etDate, etToEpoch, isWeekend, sessionOnOrBefore } from "@/lib/dates";
+import { addDays, etDate, etMinutes, etToEpoch, isWeekend, sessionOnOrBefore } from "@/lib/dates";
+import { volumePace } from "@/lib/analytics/indicators";
 import { after } from "next/server";
 import { ENV_NAMES, readEnv } from "@/lib/env";
 import { fundCategory } from "@/lib/data/classify";
 import { createLiveFinnhubSource } from "@/lib/data/finnhub/client";
 import { createEmptyFinnhubSource } from "@/lib/data/finnhub/empty";
-import { normalizeEarnings, normalizeNews, normalizeProfile, normalizeRecommendations } from "@/lib/data/finnhub/normalize";
+import { normalizeEarnings, normalizeInsiders, normalizeNews, normalizeProfile, normalizeRecommendations } from "@/lib/data/finnhub/normalize";
 import { createMockFinnhubSource } from "@/lib/data/mock/finnhub-source";
 import { createMockSchwabSource } from "@/lib/data/mock/schwab-source";
 import { getMockWorld, mockAsOf } from "@/lib/data/mock/world";
@@ -27,7 +28,7 @@ import {
   type AccountOverrides,
 } from "@/lib/data/schwab/normalize";
 import type { FinnhubSource, SchwabSource } from "@/lib/data/source";
-import type { Bar, Connection, Instrument, NewsItem, PortfolioData, RecTrend } from "@/lib/data/types";
+import type { Bar, Connection, InsiderTxn, Instrument, NewsItem, PortfolioData, RecTrend } from "@/lib/data/types";
 import { getDataModePref, listSchwabTransactions, listSnapshots, loadMarketCache, readSetting, saveMarketCache, upsertSchwabTransactions, upsertSnapshots, writeSetting } from "@/lib/db/queries";
 
 const LIVE_TTL_MS = 60_000;
@@ -89,6 +90,13 @@ function loadMock(overrides: AccountOverrides, symbolsKey: string, connection: C
 
 // ─── Sample data ──────────────────────────────────────────────────────
 
+/** Mid-session, today's volume is only part of a day's; see volumePace(). */
+function livePace(asOf: string): number | null {
+  const now = new Date();
+  if (asOf !== etDate(now)) return 1;
+  return volumePace(etMinutes(now) - 570);
+}
+
 async function build(schwab: SchwabSource, finnhub: FinnhubSource, asOf: string, overrides: AccountOverrides, extraSymbols: string[], connection: Connection): Promise<PortfolioData> {
   const [nums, prefs, accts] = await Promise.all([schwab.accountNumbers(), schwab.userPreference(), schwab.accounts()]);
   const { accounts, positions } = normalizeAccounts(nums, prefs, accts, overrides);
@@ -115,10 +123,10 @@ async function build(schwab: SchwabSource, finnhub: FinnhubSource, asOf: string,
     }),
   );
 
-  const { instruments, recommendations, news } = await reference(finnhub, symbols, quotes, positions, held, asOf);
-  const earnings = normalizeEarnings(await finnhub.earningsCalendar(asOf, addDays(asOf, 90)));
+  const { instruments, recommendations, news, insiders } = await reference(finnhub, symbols, quotes, positions, held, asOf, undefined, undefined, new Set(symbols));
+  const earnings = normalizeEarnings(await finnhub.earningsCalendar(addDays(asOf, -7), addDays(asOf, 90)));
 
-  return { mode: "mock", asOf, accounts, positions, transactions, quotes, daily, intraday, instruments, earnings, news, recommendations, universe: symbols.filter((s) => s !== "SPY"), connection };
+  return { mode: "mock", asOf, accounts, positions, transactions, quotes, daily, intraday, instruments, earnings, news, recommendations, insiders, universe: symbols.filter((s) => s !== "SPY"), connection };
 }
 
 async function reference(
@@ -130,10 +138,12 @@ async function reference(
   asOf: string,
   etfHint: Set<string> = new Set(),
   fundHint: Set<string> = new Set(),
+  watch: Set<string> = new Set(),
 ) {
   const instruments: Record<string, Instrument> = {};
   const recommendations: Record<string, RecTrend[]> = {};
   const news: NewsItem[] = [];
+  const insiders: Record<string, InsiderTxn[]> = {};
   const posType = new Map(positions.map((p) => [p.symbol, p.assetType]));
   await Promise.all(
     symbols.map(async (s) => {
@@ -154,9 +164,13 @@ async function reference(
       };
       if (!isEtf && !isFund && held.has(s)) recommendations[s] = normalizeRecommendations(await finnhub.recommendations(s));
       if (held.has(s) && !isEtf && !isFund) news.push(...normalizeNews(await finnhub.news(s, addDays(asOf, -7), asOf), s));
+      if ((held.has(s) || watch.has(s)) && !isEtf && !isFund) {
+        const rows = normalizeInsiders(await finnhub.insiderTransactions(s, addDays(asOf, -90), asOf), s);
+        if (rows.length) insiders[s] = rows;
+      }
     }),
   );
-  return { instruments, recommendations, news: news.sort((a, b) => b.datetime - a.datetime) };
+  return { instruments, recommendations, insiders, news: news.sort((a, b) => b.datetime - a.datetime) };
 }
 
 // ─── Live Schwab data ─────────────────────────────────────────────────
@@ -307,8 +321,8 @@ async function buildLive(overrides: AccountOverrides, extraSymbols: string[], co
   const live = finnhubKey ? createLiveFinnhubSource(finnhubKey, { budgetMs: 2500, symbols }) : null;
   const finnhub = live ?? createEmptyFinnhubSource();
   // Earnings first: one call covers every symbol.
-  const earnings = normalizeEarnings(await finnhub.earningsCalendar(asOf, addDays(asOf, 90)));
-  const { instruments, recommendations, news } = await reference(finnhub, symbols, quotes, positions, held, asOf, etfHint, fundHint);
+  const earnings = normalizeEarnings(await finnhub.earningsCalendar(addDays(asOf, -7), addDays(asOf, 90)));
+  const { instruments, recommendations, news, insiders } = await reference(finnhub, symbols, quotes, positions, held, asOf, etfHint, fundHint, new Set(extraSymbols));
   if (live) {
     try {
       after(() => live.drain()); // finish anything that didn't fit in this request's time budget
@@ -330,6 +344,8 @@ async function buildLive(overrides: AccountOverrides, extraSymbols: string[], co
     earnings,
     news,
     recommendations,
+    insiders,
+    volumePace: livePace(asOf),
     universe: symbols.filter((s) => s !== "SPY"),
     connection: { requested: conn.requested, status: conn.status },
     snapshots,

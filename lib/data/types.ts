@@ -113,6 +113,16 @@ export interface RecTrend {
   strongSell: number;
 }
 
+/** An insider's open-market trade (Form 4): code P = purchase, S = sale. */
+export interface InsiderTxn {
+  symbol: string;
+  name: string;
+  date: string;
+  shares: number; // signed: + bought, − sold
+  price: number;
+  code: "P" | "S";
+}
+
 export interface Connection {
   requested: "mock" | "live" | "auto";
   status: {
@@ -140,6 +150,10 @@ export interface PortfolioData {
   earnings: EarningsEvent[];
   news: NewsItem[];
   recommendations: Record<string, RecTrend[]>; // newest first
+  /** Insider open-market trades over the last 90 days, by symbol. */
+  insiders?: Record<string, InsiderTxn[]>;
+  /** Share of a normal day's volume expected by now (live, mid-session); 1 or missing otherwise. */
+  volumePace?: number | null;
   universe: string[]; // searchable symbols
   connection: Connection;
   /** Recorded daily account values (live mode), by account id. */

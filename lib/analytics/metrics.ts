@@ -56,6 +56,18 @@ export interface SymbolMetrics {
   rs3m: number | null;
   cross: CrossEvent | null;
   beta1y: number;
+  /** Today's opening gap vs yesterday's close, and that gap in units of a normal daily move. */
+  gap: number | null;
+  gapZ: number | null;
+  /** How far the price is above (or below) its 50-day average. */
+  offSma50: number | null;
+  /** Annualized volatility over the last 20 sessions. */
+  vol20: number;
+  /**
+   * Volatility scale for fixed % rules: 1 for a stock as volatile as the S&P's
+   * long-run average (16% a year), 2 for one twice as volatile. Clamped to 0.6–2.5.
+   */
+  volScale: number;
   vol1y: number;
   trendScore: number;
   trendLabel: TrendLabel;
@@ -81,7 +93,22 @@ export function ytdReturn(bars: Bar[], asOf: string): number | null {
   return base && last ? last / base - 1 : null;
 }
 
-export function computeMetrics(symbol: string, bars: Bar[], spyBars: Bar[], asOf: string, crossWithin = 20): SymbolMetrics {
+/** The S&P 500's long-run annualized volatility, the reference for `volScale`. */
+export const REFERENCE_VOL = 0.16;
+
+/**
+ * computeMetrics options. `volumePace` is the share of a normal day's volume
+ * expected by now (1 after the close); today's volume is divided by it so a
+ * half-finished session compares fairly with full-day averages. null skips
+ * today's volume entirely (the first minutes after the open).
+ */
+export interface MetricOptions {
+  crossWithin?: number;
+  volumePace?: number | null;
+}
+
+export function computeMetrics(symbol: string, bars: Bar[], spyBars: Bar[], asOf: string, opts: MetricOptions | number = {}): SymbolMetrics {
+  const { crossWithin = 20, volumePace = 1 } = typeof opts === "number" ? { crossWithin: opts } : opts;
   const closes = bars.map((b) => b.close);
   const volumes = bars.map((b) => b.volume);
   const highs = bars.map((b) => b.high);
@@ -103,7 +130,15 @@ export function computeMetrics(symbol: string, bars: Bar[], spyBars: Bar[], asOf
   const offHigh52 = high52 > 0 ? last / high52 - 1 : 0;
   const high20 = windowHigh(closes, 20);
 
-  const r = dailyReturns(closes).slice(-252);
+  const allRets = dailyReturns(closes);
+  const r = allRets.slice(-252);
+  const sd60 = allRets.length > 61 ? stdev(allRets.slice(-61, -1)) : 0;
+  const lastBar = bars.at(-1);
+  const prevClose = closes.at(-2);
+  const gap = lastBar && prevClose && lastBar.open > 0 ? lastBar.open / prevClose - 1 : null;
+  const vol1y = stdev(r) * Math.sqrt(252);
+  const rawVolRatio = volumeRatio(volumes);
+  const volRatio = rawVolRatio == null || volumePace == null ? null : rawVolRatio / Math.max(volumePace, 0.05);
   const m = dailyReturns(spy).slice(-252);
 
   const sTrend = trend60 ? clamp(trend60.annualized / 0.6, -1, 1) * trend60.r2 : 0;
@@ -131,7 +166,7 @@ export function computeMetrics(symbol: string, bars: Bar[], spyBars: Bar[], asOf
     consecDown: consecutiveDown(closes),
     down10: downShare(closes, 10),
     moveZ: moveZ(closes),
-    volRatio: volumeRatio(volumes),
+    volRatio,
     high52,
     low52: windowLow(lows, 252),
     offHigh52,
@@ -143,7 +178,12 @@ export function computeMetrics(symbol: string, bars: Bar[], spyBars: Bar[], asOf
     rs3m,
     cross: recentCross(closes, 50, 200, crossWithin),
     beta1y: betaOf(r, m),
-    vol1y: stdev(r) * Math.sqrt(252),
+    vol1y,
+    gap,
+    gapZ: gap != null && sd60 > 0 ? gap / sd60 : null,
+    offSma50: sma50 ? last / sma50 - 1 : null,
+    vol20: allRets.length > 20 ? stdev(allRets.slice(-20)) * Math.sqrt(252) : 0,
+    volScale: vol1y > 0 ? clamp(vol1y / REFERENCE_VOL, 0.6, 2.5) : 1,
     trendScore: score,
     trendLabel: trendLabel(score),
     scoreParts: { trend: sTrend, averages: sAvg, relative: sRel, drawdown: sDd },

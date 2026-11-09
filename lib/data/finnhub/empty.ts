@@ -7,5 +7,6 @@ export function createEmptyFinnhubSource(): FinnhubSource {
     profile: async () => ({}),
     recommendations: async () => [],
     news: async () => [],
+    insiderTransactions: async () => ({ data: [] }),
   };
 }

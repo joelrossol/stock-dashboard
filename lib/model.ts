@@ -6,6 +6,8 @@ import "server-only";
 import { computeMetrics, type SymbolMetrics } from "@/lib/analytics/metrics";
 import { combineHistories, makeCloseLookup, reconstructAccount, type CloseLookup, type DailyPoint } from "@/lib/analytics/reconstruct";
 import { gainBetween, shadowSeries, twrBetween, twrIndex } from "@/lib/analytics/returns";
+import { isDiversified } from "@/lib/data/classify";
+import { alignedReturns, correlatedClusters, riskShares, type RiskHolding } from "@/lib/analytics/portfolioRisk";
 import { generateSignals, groupSignals, type HoldingContext, type InsightGroup, type Signal } from "@/lib/analytics/signals";
 import type { Thresholds } from "@/lib/analytics/thresholds";
 import {
@@ -141,7 +143,7 @@ export function allMetrics(data: PortfolioData, crossWithin: number): Record<str
   if (hit) return hit;
   const spy = data.daily.SPY ?? [];
   const out: Record<string, SymbolMetrics> = {};
-  for (const [s, bars] of Object.entries(data.daily)) if (bars.length > 30) out[s] = computeMetrics(s, bars, spy, data.asOf, crossWithin);
+  for (const [s, bars] of Object.entries(data.daily)) if (bars.length > 30) out[s] = computeMetrics(s, bars, spy, data.asOf, { crossWithin, volumePace: data.volumePace ?? 1 });
   byWindow.set(crossWithin, out);
   return out;
 }
@@ -279,9 +281,41 @@ function compute(data: PortfolioData, scope: Scope, t: Thresholds, suppression: 
   const realized = realizedThisYear(matches, accounts, data.asOf);
 
   // Signals.
-  const holdingCtx: HoldingContext[] = holdingsBase.map((h) => ({ symbol: h.symbol, weight: h.weight, value: h.marketValue, unrealizedPct: h.gainPct, sector: h.sector }));
+  const firstBuy = new Map<string, string>();
+  for (const l of open) if (!firstBuy.has(l.symbol) || l.date < firstBuy.get(l.symbol)!) firstBuy.set(l.symbol, l.date);
+  const yearAgo = sessions[Math.max(0, sessions.length - 252)] ?? data.asOf;
+  const peakSince = (symbol: string): HoldingContext["peak"] => {
+    // Highest close since the earliest open lot; positions with no buy on record use the last year.
+    const bought = firstBuy.get(symbol);
+    const since = bought && bought > yearAgo ? bought : yearAgo;
+    let best: { price: number; date: string } | undefined;
+    for (const b of data.daily[symbol] ?? []) if (b.date >= since && (!best || b.close > best.price)) best = { price: b.close, date: b.date };
+    return best && { ...best, since };
+  };
+  const holdingCtx: HoldingContext[] = holdingsBase.map((h) => ({
+    symbol: h.symbol,
+    weight: h.weight,
+    value: h.marketValue,
+    unrealizedPct: h.gainPct,
+    sector: h.sector,
+    quantity: h.quantity,
+    avgCost: h.avgCost,
+    peak: peakSince(h.symbol),
+    nextExDate: q(h.symbol)?.nextExDate,
+    divPerShare: q(h.symbol)?.divAmount,
+  }));
   const held = new Set(holdingsBase.map((h) => h.symbol));
-  const watch = watchlists.flatMap((w) => w.items).filter((i) => !held.has(i.symbol)).map((i) => ({ symbol: i.symbol, target: i.targetPrice ?? undefined }));
+  const watchMap = new Map<string, { symbol: string; target?: number }>();
+  for (const i of watchlists.flatMap((w) => w.items)) {
+    if (held.has(i.symbol)) continue;
+    const prev = watchMap.get(i.symbol);
+    watchMap.set(i.symbol, { symbol: i.symbol, target: prev?.target ?? i.targetPrice ?? undefined });
+  }
+  const watch = [...watchMap.values()];
+
+  // Where the swings come from: 6 months of daily returns.
+  const riskHoldings: RiskHolding[] = holdingsBase.filter((h) => data.daily[h.symbol]?.length).map((h) => ({ symbol: h.symbol, weight: h.weight, diversified: isDiversified(h.sector) }));
+  const rets = alignedReturns([...riskHoldings.map((h) => h.symbol), "SPY"], data.daily, sessions, 126);
   const all = generateSignals({
     metrics,
     holdings: holdingCtx,
@@ -295,6 +329,11 @@ function compute(data: PortfolioData, scope: Scope, t: Thresholds, suppression: 
     total,
     asOf: data.asOf,
     t,
+    market: metrics.SPY,
+    riskShares: riskShares(riskHoldings, rets),
+    clusters: correlatedClusters(riskHoldings, rets, t.clusterCorr, rets.SPY),
+    insiders: data.insiders,
+    realized,
   });
   const isSuppressed = (s: Signal) => {
     if (s.symbol && suppression.mutes.has(s.symbol)) return true;

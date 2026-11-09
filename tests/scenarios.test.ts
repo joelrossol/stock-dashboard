@@ -37,12 +37,31 @@ describe("sample scenarios fire their signals", () => {
     ["watchlist-target", "NFLX"],
     ["wash-sale", "INTC"],
     ["lt-soon", "AAPL"],
+    ["gap", "META"],
+    ["insider-buying", "DIS"],
+    ["insider-buying", "ADBE"],
+    ["risk-share", "NVDA"],
+    ["cluster", undefined],
+    ["trailing-stop", "INTC"],
+    ["breakout", "LLY"],
   ])("%s %s", (type, symbol) => {
     expect(has(type, symbol)).toBe(true);
   });
 
   it("never suggests buying more of an over-cap position", () => {
     expect(has("buy-more", "NVDA")).toBe(false);
+  });
+
+  it("groups the chip stocks, and only them", () => {
+    const c = model.signals.find((s) => s.type === "cluster")!;
+    expect(c.title).toContain("NVDA");
+    expect(c.title).toContain("AVGO");
+    expect(c.title).not.toContain("AAPL");
+  });
+
+  it("skips price-trend rules for broad index funds", () => {
+    const trend = ["losing-streak", "downtrend", "death-cross", "below-200", "laggard", "abnormal-drop", "buy-more", "dip-in-uptrend", "breakout", "golden-cross", "extended", "gap"];
+    expect(model.signals.some((s) => ["VOO", "QQQ", "SCHD"].includes(s.symbol ?? "") && trend.includes(s.type))).toBe(false);
   });
 });
 

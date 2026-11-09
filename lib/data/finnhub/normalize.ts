@@ -1,6 +1,6 @@
 /** Raw Finnhub JSON → domain types. */
 import { z } from "zod";
-import type { EarningsEvent, NewsItem, RecTrend } from "@/lib/data/types";
+import type { EarningsEvent, InsiderTxn, NewsItem, RecTrend } from "@/lib/data/types";
 
 /** Finnhub reports an industry; map it onto a broad sector for allocation views. */
 const SECTOR_OF_INDUSTRY: Record<string, string> = {
@@ -138,4 +138,33 @@ export function normalizeNews(raw: unknown, symbol: string): NewsItem[] {
     url: n.url,
     summary: n.summary,
   }));
+}
+
+const InsiderSchema = z.object({
+  data: z
+    .array(
+      z.object({
+        name: z.string().default(""),
+        change: z.number().nullable().optional(),
+        transactionDate: z.string().nullable().optional(),
+        filingDate: z.string().nullable().optional(),
+        transactionPrice: z.number().nullable().optional(),
+        transactionCode: z.string().nullable().optional(),
+      }),
+    )
+    .default([]),
+});
+
+export function normalizeInsiders(raw: unknown, symbol: string): InsiderTxn[] {
+  return InsiderSchema.parse(raw ?? {})
+    .data.filter((t) => (t.transactionCode === "P" || t.transactionCode === "S") && t.change)
+    .map((t) => ({
+      symbol,
+      name: t.name,
+      date: (t.transactionDate || t.filingDate || "").slice(0, 10),
+      shares: t.change ?? 0,
+      price: t.transactionPrice ?? 0,
+      code: t.transactionCode as "P" | "S",
+    }))
+    .filter((t) => t.date);
 }

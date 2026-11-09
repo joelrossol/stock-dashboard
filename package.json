@@ -2,6 +2,7 @@
   "name": "stock-dashboard",
   "version": "0.1.0",
   "private": true,
+  "license": "PolyForm-Strict-1.0.0",
   "scripts": {
     "dev": "node scripts/dev-cert.mjs && next dev --experimental-https --experimental-https-key certificates/localhost-key.pem --experimental-https-cert certificates/localhost.pem --port 3000",
     "dev:http": "next dev",
@@ -21,6 +22,7 @@
     "@radix-ui/react-dropdown-menu": "^2.2.1",
     "@radix-ui/react-tooltip": "^1.4.1",
     "@tanstack/react-table": "^9.3.1",
+    "@vercel/analytics": "^2.0.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "d3-array": "^3.2.5",

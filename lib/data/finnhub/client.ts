@@ -16,6 +16,7 @@ const TTL: Record<string, number> = {
   rec: 86_400_000,
   news: 3_600_000,
   earnings: 6 * 3_600_000,
+  insider: 86_400_000,
 };
 
 const memory = new Map<string, { json: string; fetchedAt: number }>();
@@ -111,6 +112,12 @@ export function createLiveFinnhubSource(apiKey: string, opts: { budgetMs: number
     recommendations: (symbol) => cached("rec", `rec:${symbol}`, [], () => request(apiKey, "/stock/recommendation", { symbol })),
     news: (symbol, from, to) =>
       cached("news", `news:${symbol}`, [], async () => ((await request(apiKey, "/company-news", { symbol, from, to })) as unknown[]).slice(0, 8)),
+    insiderTransactions: (symbol, from, to) =>
+      cached("insider", `insider:${symbol}`, { data: [] }, async () => {
+        const raw = (await request(apiKey, "/stock/insider-transactions", { symbol, from, to })) as { data?: { transactionCode?: string }[] };
+        // Keep open-market purchases and sales only; grants and option exercises are noise here.
+        return { data: (raw.data ?? []).filter((t) => t.transactionCode === "P" || t.transactionCode === "S") };
+      }),
     async drain(limit = 80) {
       const jobs = [...queued.entries()].slice(0, limit);
       for (const [k] of jobs) queued.delete(k);

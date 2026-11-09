@@ -21,16 +21,35 @@ interface Series {
  * Daily returns = drift + beta × (market move) + idiosyncratic noise, so stocks
  * co-move with the S&P like real ones. `market` is VOO's demeaned daily returns.
  */
-function buildSeries(def: MockSymbol, n: number, rng: Rng, market: number[] | null): Series {
+/** Daily volatility of a shared industry factor. */
+const FACTOR_VOL = 0.24 / Math.sqrt(252);
+
+/** Demeaned in 10-session blocks: the factor adds co-movement without bending anyone's scripted trend. */
+function factorSeries(name: string, n: number): number[] {
+  const rng = mulberry32(hashString(`factor:${name}`));
+  const raw = Array.from({ length: n }, () => FACTOR_VOL * normal(rng));
+  for (let end = n; end > 0; end -= 10) {
+    const start = Math.max(0, end - 10);
+    const avg = raw.slice(start, end).reduce((x, y) => x + y, 0) / (end - start);
+    for (let i = start; i < end; i++) raw[i] -= avg;
+  }
+  return raw;
+}
+
+function buildSeries(def: MockSymbol, n: number, rng: Rng, market: number[] | null, factor: number[] | null = null): Series {
   const rets = new Array<number>(n).fill(0);
   const b = market ? betaOf(def) : 0;
   const mVol = market ? 0.15 / Math.sqrt(252) : 0;
+
   let idx = n - 1;
   for (const [days, mu, vol] of def.segs) {
     const total = vol / Math.sqrt(252);
-    const idio = Math.sqrt(Math.max(total * total - b * b * mVol * mVol, (0.3 * total) ** 2));
+    // The factor never takes more than ~60% of a segment's variance, so quiet stretches stay quiet.
+    const load = factor ? Math.min(1, (0.75 * total) / FACTOR_VOL) : 0;
+    const fVol = load * FACTOR_VOL;
+    const idio = Math.sqrt(Math.max(total * total - b * b * mVol * mVol - fVol * fVol, (0.3 * total) ** 2));
     for (let k = 0; k < days && idx > 0; k++, idx--) {
-      rets[idx] = mu / 252 + b * (market ? market[idx] : 0) + idio * normal(rng);
+      rets[idx] = mu / 252 + b * (market ? market[idx] : 0) + load * (factor ? factor[idx] : 0) + idio * normal(rng);
     }
   }
   const tail = def.tail ?? [];
@@ -115,6 +134,8 @@ export function generatePrices(sessions: string[]): GeneratedPrices {
   const order = [...UNIVERSE].sort((a, b) => (a.symbol === "VOO" ? -1 : b.symbol === "VOO" ? 1 : 0));
   let spyCloses: number[] = [];
   let market: number[] | null = null;
+  const factors = new Map<string, number[]>();
+  const factorFor = (name?: string) => (name ? (factors.get(name) ?? factors.set(name, factorSeries(name, n)).get(name)!) : null);
 
   for (const def of order) {
     const base = hashString(def.symbol);
@@ -122,7 +143,7 @@ export function generatePrices(sessions: string[]): GeneratedPrices {
     let chosenRng: Rng | null = null;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const rng = mulberry32(base + attempt * 7919);
-      const s = buildSeries(def, n, rng, def.symbol === "VOO" ? null : market);
+      const s = buildSeries(def, n, rng, def.symbol === "VOO" ? null : market, factorFor(def.factor));
       if ((def.check ?? defaultCheck)({ closes: s.closes, volumes: s.volumes, spy: spyCloses })) {
         chosen = s;
         chosenRng = rng;
@@ -162,7 +183,8 @@ export function generatePrices(sessions: string[]): GeneratedPrices {
     const out: Bar[] = [];
     for (let i = n - 5; i < n; i++) {
       const prevClose = bars[i - 1].close;
-      const b = { ...bars[i], open: round2(prevClose * (1 + 0.15 * vols[sym] * normal(rng))) };
+      const gap = i === n - 1 ? UNIVERSE.find((u) => u.symbol === sym)?.gapPct : undefined;
+      const b = { ...bars[i], open: round2(prevClose * (1 + (gap != null ? gap / 100 : 0.15 * vols[sym] * normal(rng)))) };
       const day = intradayFor(sessions[i], b, vols[sym], rng);
       bars[i] = {
         ...bars[i],

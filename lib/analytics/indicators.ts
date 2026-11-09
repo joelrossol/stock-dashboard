@@ -221,3 +221,39 @@ export function beta(asset: number[], market: number[]): number {
   const v = stdev(m) ** 2;
   return v > 0 ? covariance(a, m) / v : 1;
 }
+
+/**
+ * Typical cumulative share of a day's volume by minutes after the 9:30 ET open.
+ * US volume is U-shaped: heavy at the open, quiet midday, and heavy into the
+ * close, with the closing auction adding roughly the last 10%.
+ */
+const VOLUME_CURVE: [number, number][] = [
+  [0, 0],
+  [30, 0.12],
+  [60, 0.19],
+  [120, 0.3],
+  [180, 0.39],
+  [240, 0.48],
+  [300, 0.58],
+  [360, 0.73],
+  [389, 0.88],
+  [390, 1],
+];
+
+/**
+ * Share of a normal day's volume expected `minutesSinceOpen` into the session:
+ * 1 once the session is over, null in the first 15 minutes (too early to judge).
+ */
+export function volumePace(minutesSinceOpen: number): number | null {
+  if (minutesSinceOpen >= 390) return 1;
+  if (minutesSinceOpen < 15) return null;
+  for (let i = 1; i < VOLUME_CURVE.length; i++) {
+    const [m1, v1] = VOLUME_CURVE[i];
+    if (minutesSinceOpen <= m1) {
+      const [m0, v0] = VOLUME_CURVE[i - 1];
+      return v0 + ((minutesSinceOpen - m0) / (m1 - m0)) * (v1 - v0);
+    }
+  }
+  return 1;
+}
+

@@ -15,6 +15,20 @@ const EARNINGS_IN: Record<string, [number, "bmo" | "amc"]> = {
   AVGO: [35, "amc"],
   COST: [41, "amc"],
   SNOW: [20, "amc"],
+  META: [-1, "amc"], // reported last night; the sample shows the gap-up reaction
+};
+
+/** Sample insider buying: [insider, days ago, shares]. */
+const INSIDER_BUYS: Record<string, [string, number, number][]> = {
+  DIS: [
+    ["Iger Robert A", 9, 18_000],
+    ["Mcdonald Calvin", 16, 6_500],
+    ["Lagomasino Maria Elena", 23, 4_000],
+  ],
+  ADBE: [
+    ["Narayen Shantanu", 12, 5_000],
+    ["Durn Daniel", 30, 2_500],
+  ],
 };
 
 function earningsOffset(symbol: string): [number, "bmo" | "amc"] {
@@ -79,6 +93,20 @@ export function createMockFinnhubSource(): FinnhubSource {
         else r = { ...r, buy: Math.max(0, r.buy - (k % 2)), hold: r.hold + (k % 2) };
         return { ...r, period: d, symbol };
       });
+    },
+
+    async insiderTransactions(symbol) {
+      const u = findMock(symbol);
+      const buys = INSIDER_BUYS[symbol];
+      if (!u || !buys) return { data: [] };
+      const asOf = getMockWorld().asOf;
+      return {
+        symbol,
+        data: buys.map(([name, ago, shares]) => {
+          const date = addDays(asOf, -ago);
+          return { name, share: shares * 4, change: shares, filingDate: addDays(date, 2), transactionDate: date, transactionCode: "P", transactionPrice: Math.round(u.price * 0.97 * 100) / 100 };
+        }),
+      };
     },
 
     async news(symbol) {

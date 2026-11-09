@@ -35,6 +35,8 @@ export interface MockSymbol {
   tail?: number[]; // exact daily moves (%) before today, oldest first
   volume: number; // typical daily shares
   volSpike?: number; // today's volume multiple
+  gapPct?: number; // today's opening gap vs yesterday's close, %
+  factor?: string; // shared industry factor, so these names move together
   pe?: number;
   divYield?: number; // %
   marketCapB?: number;
@@ -55,7 +57,7 @@ export const UNIVERSE: MockSymbol[] = [
 
   // ── Holdings ────────────────────────────────────────────────────────
   {
-    symbol: "NVDA", name: "NVIDIA Corp", assetType: "EQUITY", industry: "Semiconductors", price: 198.4, todayPct: 2.8,
+    symbol: "NVDA", name: "NVIDIA Corp", assetType: "EQUITY", industry: "Semiconductors", price: 198.4, todayPct: 2.8, factor: "chips",
     segs: [[120, 0.5, 0.34], [INF, 0.62, 0.42]], volume: 210_000_000, pe: 48, divYield: 0.02, marketCapB: 4830,
     check: ({ closes }) => {
       const r = rsi(closes) ?? 0;
@@ -86,8 +88,8 @@ export const UNIVERSE: MockSymbol[] = [
     segs: [[INF, 0.25, 0.26]], volume: 30_000_000, pe: 27, divYield: 0.3, marketCapB: 3440,
   },
   {
-    symbol: "META", name: "Meta Platforms Inc", assetType: "EQUITY", industry: "Media", price: 742.3, todayPct: 3.1,
-    segs: [[150, 0.5, 0.3], [60, -0.95, 0.32], [INF, 0.2, 0.3]], volume: 13_000_000, pe: 29, divYield: 0.3, marketCapB: 1870,
+    symbol: "META", name: "Meta Platforms Inc", assetType: "EQUITY", industry: "Media", price: 742.3, todayPct: 7.4, gapPct: 6.1, // reported last night
+    segs: [[150, 0.5, 0.3], [60, -0.95, 0.32], [INF, 0.2, 0.3]], volume: 13_000_000, volSpike: 2.6, pe: 29, divYield: 0.3, marketCapB: 1870,
     check: ({ closes }) => {
       const n = closes.length;
       const at = closes[n - 1 - 150];
@@ -96,7 +98,7 @@ export const UNIVERSE: MockSymbol[] = [
     },
   },
   {
-    symbol: "AVGO", name: "Broadcom Inc", assetType: "EQUITY", industry: "Semiconductors", price: 372.8, todayPct: 2.2,
+    symbol: "AVGO", name: "Broadcom Inc", assetType: "EQUITY", industry: "Semiconductors", price: 372.8, todayPct: 2.2, factor: "chips",
     segs: [[25, 0.2, 0.13], [65, -0.3, 0.15], [INF, 0.42, 0.3]], tail: [1.4, 0.9, 1.7], volume: 24_000_000, volSpike: 1.9, pe: 41, divYield: 0.7, marketCapB: 1750, beta: 0.5,
     check: ({ closes, volumes }) => closes.at(-1)! >= windowHigh(closes.slice(0, -1), 251) * 1.003 && (volumeRatio(volumes) ?? 0) >= 1.5,
   },
@@ -147,12 +149,13 @@ export const UNIVERSE: MockSymbol[] = [
     segs: [[INF, 0.06, 0.13]], volume: 14_000_000, pe: 24, divYield: 2.9, marketCapB: 307,
   },
   {
-    symbol: "AMD", name: "Advanced Micro Devices Inc", assetType: "EQUITY", industry: "Semiconductors", price: 228.4, todayPct: -0.6,
-    segs: [[8, -2.6, 0.25], [INF, 0.55, 0.45]], volume: 48_000_000, pe: 95, marketCapB: 370,
+    symbol: "AMD", name: "Advanced Micro Devices Inc", assetType: "EQUITY", industry: "Semiconductors", price: 228.4, todayPct: -0.6, factor: "chips",
+    segs: [[6, -6.5, 0.28], [INF, 0.62, 0.45]], volume: 48_000_000, pe: 95, marketCapB: 370,
     check: ({ closes }) => {
       const last = closes.at(-1)!;
       const off = last / windowHigh(closes, 20) - 1;
-      return last > (lastSma(closes, 200) ?? Infinity) && (logTrend(closes, 60)?.slopePerDay ?? -1) > 0 && off <= -0.05 && off >= -0.12;
+      // AMD is ~2.5× as volatile as the S&P, so its dip band (5–12% scaled) is ~13–30%.
+      return last > (lastSma(closes, 200) ?? Infinity) && (logTrend(closes, 60)?.slopePerDay ?? -1) > 0 && off <= -0.14 && off >= -0.28;
     },
   },
   {

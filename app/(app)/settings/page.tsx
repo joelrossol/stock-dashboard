@@ -204,11 +204,18 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
                 <legend className="px-1 text-[0.6875rem] text-fg-2">{g}</legend>
                 <div className="flex flex-col gap-1.5">
                   {THRESHOLD_FIELDS.filter((f) => f.group === g).map((f) => (
-                    <label key={f.key} className="grid grid-cols-[1fr_88px] items-center gap-2 text-[0.7188rem] text-fg-2">
-                      <span>{f.label}</span>
+                    <label key={f.key} className="grid grid-cols-[1fr_104px] items-center gap-2 text-[0.7188rem] text-fg-2">
+                      <span>
+                        {f.label}
+                        {f.scaled && (
+                          <span className="ml-1 text-fg-3" title="Set for a stock as volatile as the S&P 500; scaled up or down for each stock's own volatility">
+                            ±vol
+                          </span>
+                        )}
+                      </span>
                       <span className="relative">
-                        <input name={f.key} type="number" step="any" defaultValue={display(f.key, f.unit)} className={`${input} pr-9 text-right`} />
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[0.625rem] text-fg-3">{f.unit === "score" || f.unit === "r2" || f.unit === "z" ? "" : f.unit}</span>
+                        <input name={f.key} type="number" step="any" defaultValue={display(f.key, f.unit)} className={`${input} pr-10 text-right tabular-nums`} />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[0.625rem] text-fg-3">{f.unit === "score" || f.unit === "r2" || f.unit === "z" || f.unit === "count" ? "" : f.unit === "sessions" ? "sess" : f.unit}</span>
                       </span>
                     </label>
                   ))}
@@ -216,6 +223,9 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
               </fieldset>
             ))}
           </div>
+          <p className="mt-2 text-[0.6875rem] text-fg-3">
+            Rules marked <span className="text-fg-2">±vol</span> are set for a stock that moves like the S&amp;P 500 (about 16% a year) and stretch with each stock&apos;s own volatility, from 0.6× to 2.5×. Broad index and bond funds skip the price-trend rules; the market check covers them.
+          </p>
           <div className="mt-2 flex justify-end gap-2">
             <button formAction={resetThresholdsAction} className="rounded-lg px-3 py-1.5 text-[0.75rem] text-fg-3 hover:text-fg-2">
               Reset to defaults

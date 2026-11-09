@@ -38,6 +38,8 @@ export interface FinnhubSource {
   recommendations(symbol: string): Promise<unknown>;
   /** GET /company-news */
   news(symbol: string, from: string, to: string): Promise<unknown>;
+  /** GET /stock/insider-transactions */
+  insiderTransactions(symbol: string, from: string, to: string): Promise<unknown>;
 }
 
 export type DataMode = "mock" | "live";

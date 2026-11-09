@@ -62,13 +62,13 @@ Get a free API key at [finnhub.io](https://finnhub.io/register) and add it to `.
 FINNHUB_API_KEY=...
 ```
 
-This adds earnings dates, analyst ratings, company news and stock sectors. Without it, everything else still works.
+This adds earnings dates, analyst ratings, company news, insider buying and stock sectors. Without it, everything else still works.
 
 ---
 
 ## 4. Host it on Vercel (optional)
 
-1. Push your copy of the repo to GitHub, then **Import** it at [vercel.com/new](https://vercel.com/new).
+1. Push your copy of the repo to a **private** GitHub repo (the license doesn't allow republishing it), then **Import** it at [vercel.com/new](https://vercel.com/new).
 2. **Add a database:** Project → **Storage → Create → Turso** (free), connected to the **Production** environment. The app finds Turso's variables automatically and creates its tables on first use. Without a database it falls back to a temporary one that resets often, which means reconnecting Schwab often.
 3. **Add environment variables** (Project → Settings → Environment Variables, with **Production** ticked):
 
@@ -99,7 +99,7 @@ Vercel → Project → **Settings → Domains → Add**, then create the DNS rec
 |---|---|---|
 | `AUTH_EMAIL`, `AUTH_PASSWORD_HASH`, `AUTH_SECRET` | Signing in | Written by `npm run set-password`. Only a salted scrypt hash of the password is stored. |
 | `SCHWAB_APP_KEY`, `SCHWAB_APP_SECRET` | Live data | From developer.schwab.com |
-| `FINNHUB_API_KEY` | Earnings, news, ratings, sectors | Optional |
+| `FINNHUB_API_KEY` | Earnings, news, ratings, insider trades, sectors | Optional |
 | `DATA_MODE` | | `auto` (default): live when connected, otherwise sample data. `mock` always uses sample data. You can also switch in Settings. |
 | `SCHWAB_CALLBACK_URL` | | Optional. Defaults to `https://127.0.0.1:3000/...` locally and your production domain on Vercel. |
 | `TOKEN_ENCRYPTION_KEY` | | Optional. Encrypts stored Schwab tokens; derived from `AUTH_SECRET` if not set. |
@@ -131,7 +131,7 @@ Signals are mechanical rules with thresholds you can change in Settings. They're
 | Intraday charts | Every 2 minutes |
 | Daily price history | Once a day (stored in the database; today's price comes from the live quote) |
 | Transactions | Last 90 days on every load; 3 years back once a day, in the background |
-| Earnings / ratings / news / company profiles | 6 hours / 1 day / 1 hour / 7 days |
+| Earnings / ratings / news / insider trades / company profiles | 6 hours / 1 day / 1 hour / 1 day / 7 days |
 
 Schwab's API only keeps about a year of transactions and has no balance history, so the app stores every transaction it sees and records each day's balances. Your history gets more accurate the longer you use it.
 
@@ -185,3 +185,9 @@ components/charts/*    custom SVG charts
 Sample data goes through the same normalizers as live data, so the sample and live versions of every page are built by the same code.
 
 Ideas and parked features live in [ROADMAP.md](ROADMAP.md).
+
+---
+
+## License
+
+[PolyForm Strict 1.0.0](LICENSE.md). You're welcome to download it and run it for yourself, for personal, non-commercial use. You may not change it, build on it, redistribute it, or use it commercially. All rights not granted are reserved by the author. For anything else, ask first.
