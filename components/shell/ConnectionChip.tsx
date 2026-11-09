@@ -21,6 +21,13 @@ export function ConnectionChip({ mode, connection, asOfLabel, expiresInMs }: { m
       </Link>
     );
   }
+  if (connection.notice === "demo") {
+    return (
+      <Link href="/settings" title="No login is set up, so only sample data is available">
+        <Chip tone="warn">Demo · sample data</Chip>
+      </Link>
+    );
+  }
   if (connection.notice === "expired") {
     return (
       <Link href="/settings">

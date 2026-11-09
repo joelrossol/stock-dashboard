@@ -10,6 +10,7 @@ import "server-only";
 import { addDays, etDate, etMinutes, etToEpoch, isWeekend, sessionOnOrBefore } from "@/lib/dates";
 import { volumePace } from "@/lib/analytics/indicators";
 import { after } from "next/server";
+import { demoMode } from "@/lib/auth/session";
 import { ENV_NAMES, readEnv } from "@/lib/env";
 import { fundCategory } from "@/lib/data/classify";
 import { createLiveFinnhubSource } from "@/lib/data/finnhub/client";
@@ -50,9 +51,11 @@ async function requestedMode(): Promise<Connection["requested"]> {
 }
 
 export async function loadPortfolioData(overrides: AccountOverrides = {}, extraSymbols: string[] = []): Promise<PortfolioData> {
+  const symbolsKey = [...extraSymbols].sort().join(",");
+  // No login set up: sample data only, whatever the toggle says or tokens are stored.
+  if (demoMode()) return loadMock(overrides, symbolsKey, { requested: "mock", status: null, notice: "demo" });
   const requested = await requestedMode();
   const status = await schwabStatus();
-  const symbolsKey = [...extraSymbols].sort().join(",");
 
   if (requested !== "mock" && status.connected) {
     const key = `${JSON.stringify(overrides)}|${symbolsKey}`;

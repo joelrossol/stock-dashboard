@@ -19,7 +19,7 @@ import {
   unsnoozeSignal,
 } from "@/lib/db/queries";
 import { SCOPE_COOKIE } from "@/lib/context";
-import { requireUser } from "@/lib/auth/server";
+import { requireOwner, requireUser } from "@/lib/auth/server";
 
 const SYMBOL = /^[A-Z.\-]{1,10}$/;
 
@@ -137,7 +137,7 @@ export async function loadSymbolBarsAction(symbol: string) {
 }
 
 export async function disconnectSchwabAction() {
-  await requireUser();
+  await requireOwner();
   const { disconnectSchwab } = await import("@/lib/data/schwab/auth");
   const { clearLiveCache } = await import("@/lib/data/load");
   await disconnectSchwab();
@@ -153,7 +153,7 @@ export async function refreshDataAction() {
 }
 
 export async function setDataModeAction(mode: "live" | "mock") {
-  await requireUser();
+  await requireOwner();
   const { setDataModePref } = await import("@/lib/db/queries");
   const { clearLiveCache } = await import("@/lib/data/load");
   await setDataModePref(mode === "live" ? "live" : "mock");

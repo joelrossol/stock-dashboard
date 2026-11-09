@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { currentUser } from "@/lib/auth/server";
+import { demoMode } from "@/lib/auth/session";
 import { randomState } from "@/lib/crypto";
 import { authorizeUrl, SchwabAuthError, schwabConfig } from "@/lib/data/schwab/auth";
 
@@ -7,7 +8,7 @@ const STATE_COOKIE = "schwab_oauth_state";
 
 /** Starts the Schwab sign-in: sets a one-time state cookie and redirects to Schwab. */
 export async function GET(req: NextRequest) {
-  if (!(await currentUser())) return NextResponse.redirect(new URL("/login", req.url));
+  if (demoMode() || !(await currentUser())) return NextResponse.redirect(new URL("/login", req.url));
   // The sign-in cookie only comes back if we start on the same origin Schwab returns to.
   const cfg = schwabConfig();
   if (cfg) {

@@ -66,3 +66,39 @@ describe("login setup diagnostics", () => {
     expect(authEmail()).toBe("owner@example.com");
   });
 });
+
+describe("demo mode", () => {
+  const VARS = ["AUTH_EMAIL", "AUTH_PASSWORD_HASH", "AUTH_SECRET"] as const;
+  const saved: Record<string, string | undefined> = {};
+  beforeAll(() => VARS.forEach((v) => (saved[v] = process.env[v])));
+  afterAll(() => VARS.forEach((v) => (saved[v] === undefined ? delete process.env[v] : (process.env[v] = saved[v]))));
+  const setVars = (vals: Partial<Record<(typeof VARS)[number], string>>) => VARS.forEach((v) => (vals[v] === undefined ? delete process.env[v] : (process.env[v] = vals[v])));
+
+  it("is on only when no login variable is set at all", async () => {
+    const { demoMode } = await import("@/lib/auth/session");
+    setVars({});
+    expect(demoMode()).toBe(true);
+    setVars({ AUTH_EMAIL: "  " });
+    expect(demoMode()).toBe(true);
+    // Any variable set, even a broken one, keeps the site locked.
+    for (const v of VARS) {
+      setVars({ [v]: "x" });
+      expect(demoMode()).toBe(false);
+    }
+  });
+
+  it("opens pages but closes the Schwab sign-in and login routes", async () => {
+    const { NextRequest } = await import("next/server");
+    const { proxy } = await import("@/proxy");
+    const go = (path: string) => proxy(new NextRequest(new URL(path, "https://127.0.0.1:3000")));
+
+    setVars({});
+    expect(go("/holdings").headers.get("location")).toBeNull();
+    expect(go("/api/auth/schwab/login").headers.get("location")).toContain("/settings?schwab_error=");
+    expect(go("/api/auth/schwab/callback?code=x").headers.get("location")).toContain("/settings?schwab_error=");
+    expect(new URL(go("/login").headers.get("location")!).pathname).toBe("/");
+
+    setVars({ AUTH_EMAIL: "owner@example.com", AUTH_SECRET: "test-secret-test-secret-test-secret-1234" });
+    expect(go("/holdings").headers.get("location")).toContain("/login");
+  });
+});

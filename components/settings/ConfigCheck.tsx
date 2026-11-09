@@ -1,6 +1,6 @@
 import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { Card, CardHeader, Chip } from "@/components/ui/primitives";
-import { authProblems } from "@/lib/auth/session";
+import { authProblems, demoMode } from "@/lib/auth/session";
 import { callbackUrl } from "@/lib/data/schwab/auth";
 import { databaseInfo } from "@/lib/db/client";
 import { ENV_NAMES, readEnv, similarEnvNames } from "@/lib/env";
@@ -15,7 +15,9 @@ export function ConfigCheck() {
   const db = databaseInfo();
   const login = authProblems();
   const rows: { label: string; state: State; detail: string }[] = [
-    { label: "Login", state: login.length ? "missing" : "ok", detail: login.length ? login.join("; ") : "AUTH_EMAIL, AUTH_PASSWORD_HASH, AUTH_SECRET" },
+    demoMode()
+      ? { label: "Login", state: "optional", detail: "Not set up, so the app runs in demo mode (sample data only). Run npm run set-password." }
+      : { label: "Login", state: login.length ? "missing" : "ok", detail: login.length ? login.join("; ") : "AUTH_EMAIL, AUTH_PASSWORD_HASH, AUTH_SECRET" },
     { label: "Schwab App Key", state: key.name ? "ok" : "missing", detail: key.name ? `found as ${key.name}` : "SCHWAB_APP_KEY not found" },
     { label: "Schwab App Secret", state: secret.name ? "ok" : "missing", detail: secret.name ? `found as ${secret.name}` : "SCHWAB_APP_SECRET not found" },
     { label: "Finnhub", state: finnhub.name ? "ok" : "optional", detail: finnhub.name ? `found as ${finnhub.name}` : "FINNHUB_API_KEY not set (optional)" },

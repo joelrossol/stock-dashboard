@@ -132,7 +132,8 @@ export interface Connection {
     refreshExpiresAt: number | null;
     callbackUrl: string;
   } | null;
-  notice?: "not-configured" | "not-connected" | "expired" | "error";
+  /** "demo": no login is set up, so only sample data is allowed. */
+  notice?: "demo" | "not-configured" | "not-connected" | "expired" | "error";
   error?: string;
 }
 

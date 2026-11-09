@@ -48,6 +48,16 @@ export function authConfigured(): boolean {
   return authProblems().length === 0;
 }
 
+/**
+ * Demo mode: none of the login variables are set, so the app opens straight
+ * into sample data for anyone, and live data and Schwab stay locked. If any
+ * of them is set, even wrongly, the app stays behind the login instead, so a
+ * typo can't open up a real setup.
+ */
+export function demoMode(): boolean {
+  return !envValue("AUTH_EMAIL") && !envValue("AUTH_PASSWORD_HASH") && !envValue("AUTH_SECRET");
+}
+
 const sign = (data: string, key: string) => createHmac("sha256", key).update(data).digest("base64url");
 
 export function encodeSession(s: Session): string {

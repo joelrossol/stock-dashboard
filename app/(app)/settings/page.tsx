@@ -29,6 +29,7 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
   const [{ data, settings, schwabExpiresInMs }, sp, h] = await Promise.all([getPageContext(), searchParams, headers()]);
   const here = `${h.get("x-forwarded-proto") ?? (h.get("host")?.startsWith("127.0.0.1") ? "https" : "http")}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const conn = data.connection;
+  const demo = conn.notice === "demo";
   const finnhubOn = !!readEnv(ENV_NAMES.finnhub).value;
   const hosted = !!process.env.VERCEL;
   const missingKeys = [!readEnv(ENV_NAMES.schwabKey).value && "SCHWAB_APP_KEY", !readEnv(ENV_NAMES.schwabSecret).value && "SCHWAB_APP_SECRET"].filter(Boolean) as string[];
@@ -47,7 +48,9 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
     : st.expired
       ? "Schwab login expired; reconnect below"
       : "Connect Schwab below to switch on";
-  const schwabChip =
+  const schwabChip = demo ? (
+    <Chip tone="warn">Locked in demo</Chip>
+  ) :
     data.mode === "live" ? <Chip tone="up">Connected</Chip> : st?.expired ? <Chip tone="down">Login expired</Chip> : st?.configured ? <Chip tone="warn">Ready to connect</Chip> : <Chip tone="warn">Not set up</Chip>;
   const t = settings.thresholds;
   const groups = [...new Set(THRESHOLD_FIELDS.map((f) => f.group))];
@@ -63,13 +66,39 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
 
       <ConfigCheck />
 
-      <Card>
-        <CardHeader title="Data source" right={data.mode === "live" ? <Chip tone="up">Showing live data</Chip> : <Chip tone="warn">Showing sample data</Chip>} />
-        <DataSourceToggle selected={selected} live={data.mode === "live"} liveNote={liveNote} />
-        {selected === "live" && data.mode !== "live" && (
-          <p className="mt-2 text-[0.7188rem] text-fg-3">Live is selected; sample data shows until Schwab is connected.</p>
-        )}
-      </Card>
+      {demo ? (
+        <Card>
+          <CardHeader title="Data source" right={<Chip tone="warn">Demo · sample data</Chip>} />
+          <p className="text-[0.75rem] text-fg-2">
+            You&apos;re trying the app on made-up accounts. Live data and Schwab stay locked until you set up a login, so nobody else can ever reach your real accounts.
+          </p>
+          <ol className="mt-2 list-decimal space-y-1 pl-4 text-[0.7188rem] text-fg-3">
+            <li>
+              On your computer, run <code className="text-fg-2">npm run set-password</code> and choose the email and password you&apos;ll sign in with. It saves only a hash of the password to <code className="text-fg-2">.env.local</code>.
+            </li>
+            <li>
+              {hosted ? (
+                <>
+                  Copy <code className="text-fg-2">AUTH_EMAIL</code>, <code className="text-fg-2">AUTH_PASSWORD_HASH</code> and <code className="text-fg-2">AUTH_SECRET</code> from <code className="text-fg-2">.env.local</code> into Vercel → Settings → Environment Variables (Production), then redeploy.
+                </>
+              ) : (
+                <>
+                  Restart <code className="text-fg-2">npm run dev</code>.
+                </>
+              )}
+            </li>
+            <li>Sign in, then connect Schwab here.</li>
+          </ol>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader title="Data source" right={data.mode === "live" ? <Chip tone="up">Showing live data</Chip> : <Chip tone="warn">Showing sample data</Chip>} />
+          <DataSourceToggle selected={selected} live={data.mode === "live"} liveNote={liveNote} />
+          {selected === "live" && data.mode !== "live" && (
+            <p className="mt-2 text-[0.7188rem] text-fg-3">Live is selected; sample data shows until Schwab is connected.</p>
+          )}
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
         <Card>
@@ -124,7 +153,9 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
                 </li>
                 <li>{hosted ? "Connect below." : "Open the app at https://127.0.0.1:3000 and connect below."} You&apos;ll sign in on Schwab&apos;s own site.</li>
               </ol>
-              {st?.configured ? (
+              {demo ? (
+                <p className="mt-3 text-[0.7188rem] text-warn">Set up a login first (see Data source above). Connecting is locked in demo mode.</p>
+              ) : st?.configured ? (
                 <a href="/api/auth/schwab/login" className={`${btn} mt-3 inline-block`}>
                   {st.expired ? "Reconnect Schwab" : "Connect Schwab"}
                 </a>
@@ -149,7 +180,7 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/settings">
           <CardHeader title="Data" />
           <dl className="grid grid-cols-[110px_1fr] gap-y-1.5 text-[0.75rem]">
             <dt className="text-fg-3">Mode</dt>
-            <dd>{data.mode === "live" ? "Live Schwab data" : `Sample data (DATA_MODE=${conn.requested})`}</dd>
+            <dd>{data.mode === "live" ? "Live Schwab data" : demo ? "Sample data (demo: no login set up)" : `Sample data (DATA_MODE=${conn.requested})`}</dd>
             <dt className="text-fg-3">As of</dt>
             <dd>{fmtDate(data.asOf, "long")}</dd>
             <dt className="text-fg-3">Database</dt>

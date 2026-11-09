@@ -15,17 +15,26 @@ git clone https://github.com/joelrossol/stock-dashboard.git
 cd stock-dashboard
 npm install
 cp .env.example .env.local
-npm run set-password      # choose the email and password you'll sign in with
 npm run dev
 ```
 
-Open **https://127.0.0.1:3000**. Your browser warns about the certificate once: the dev server uses a self-signed certificate made on your machine, so choose *Advanced → Proceed*. Sign in with the email and password you just chose.
+Open **https://127.0.0.1:3000**. Your browser warns about the certificate once: the dev server uses a self-signed certificate made on your machine, so choose *Advanced → Proceed*.
 
-You'll see three made-up accounts. None of this data is real.
+It opens straight into **demo mode**: three made-up accounts, no sign-in needed. None of this data is real. Live data stays locked until you set up a login (next section).
 
 ---
 
 ## 2. Connect your Schwab account
+
+### First, set up your login
+
+Live data only works behind a login, so nobody else can reach your accounts:
+
+```bash
+npm run set-password      # choose the email and password you'll sign in with
+```
+
+Restart `npm run dev` and sign in. Only a salted hash of the password is saved, in `.env.local`. On Vercel, copy the three `AUTH_*` values into the project's environment variables (section 4).
 
 ### a. Create a Schwab developer app (one time)
 
@@ -139,7 +148,8 @@ Schwab's API only keeps about a year of transactions and has no balance history,
 
 ## Privacy and security
 
-- **The whole site is behind your login.** A server-side check turns away anyone without a valid session before any page, API route or action runs. Sessions end after 12 hours idle or 7 days. Five wrong passwords lock sign-in for 15 minutes. Search engines are told not to index it.
+- **No login, no live data.** With no `AUTH_*` variables set, the app runs in demo mode: anyone can open it, but it only shows the made-up sample accounts, and connecting Schwab is locked. If any `AUTH_*` variable is set, even wrongly, the whole site stays behind the login instead.
+- **The whole site is behind your login** once it's set up. A server-side check turns away anyone without a valid session before any page, API route or action runs. Sessions end after 12 hours idle or 7 days. Five wrong passwords lock sign-in for 15 minutes. Search engines are told not to index it.
 - **Your keys never go in git.** `.env.local` and the database are gitignored, and a pre-commit hook blocks any commit containing `.env` files, certificates, the database, or any value from `.env.local`. Run it on demand with `npm run check:secrets`.
 - **Schwab tokens are encrypted** (AES-256-GCM) in your database.
 - **Sample data is invented.** The accounts in `lib/data/mock/` don't belong to anyone.
@@ -152,7 +162,8 @@ Schwab's API only keeps about a year of transactions and has no balance history,
 | Problem | Fix |
 |---|---|
 | Browser says the connection isn't private (local) | Expected for the local self-signed certificate. Choose *Advanced → Proceed*. |
-| "Login isn't set up" | Run `npm run set-password`. On Vercel, add the three `AUTH_*` variables to **Production** and redeploy. |
+| "Login isn't set up" | One or more `AUTH_*` variables is set but wrong (Settings → Server configuration says which). Run `npm run set-password`; on Vercel, copy all three `AUTH_*` variables to **Production** and redeploy. |
+| It says "Demo · sample data" and won't connect Schwab | No login is set up yet. Run `npm run set-password` (and add the `AUTH_*` variables on Vercel). |
 | Settings shows a variable as "not found" on Vercel | Check that the variable has **Production** ticked, then redeploy. |
 | Schwab says the callback URL is invalid | The URL in your Schwab app must match the one shown in Settings exactly, including `https` and the port. |
 | You keep having to reconnect Schwab on Vercel | Settings → Server configuration → Database should say "Turso (hosted)". If it says "temporary", add Turso (section 4). |

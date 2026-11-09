@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { KeyRound, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { usePersistentState } from "@/components/ui/usePersistentState";
 import { cn } from "@/lib/cn";
@@ -10,7 +10,7 @@ import { MarketStatus } from "./MarketStatus";
 import { isActive, NAV, SETTINGS_NAV, type NavItem } from "./nav";
 
 
-export function Sidebar({ insightCount, mode }: { insightCount: number | null; mode: "mock" | "live" }) {
+export function Sidebar({ insightCount, mode, demo = false }: { insightCount: number | null; mode: "mock" | "live"; demo?: boolean }) {
   const pathname = usePathname();
   const [pref, setPref] = usePersistentState("sidebar-expanded", "0", ["0", "1"] as const);
   const expanded = pref === "1";
@@ -57,16 +57,27 @@ export function Sidebar({ insightCount, mode }: { insightCount: number | null; m
       <div className="flex-1" />
       <div className="flex flex-col gap-1">
         {item(SETTINGS_NAV)}
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            title={expanded ? undefined : "Sign out"}
-            className="flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-[0.8125rem] text-fg-3 hover:bg-card hover:text-fg-2"
+        {demo ? (
+          <Link
+            href="/settings"
+            title={expanded ? undefined : "Set up a login to use live data"}
+            className="flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-[0.8125rem] text-warn hover:bg-card"
           >
-            <LogOut size={21} strokeWidth={1.8} />
-            {expanded && <span>Sign out</span>}
-          </button>
-        </form>
+            <KeyRound size={21} strokeWidth={1.8} />
+            {expanded && <span>Set up login</span>}
+          </Link>
+        ) : (
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              title={expanded ? undefined : "Sign out"}
+              className="flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-[0.8125rem] text-fg-3 hover:bg-card hover:text-fg-2"
+            >
+              <LogOut size={21} strokeWidth={1.8} />
+              {expanded && <span>Sign out</span>}
+            </button>
+          </form>
+        )}
         <button
           onClick={toggle}
           className="flex h-9 items-center gap-3 rounded-lg px-2.5 text-[0.8125rem] text-fg-3 hover:bg-card hover:text-fg-2"

@@ -6,10 +6,15 @@ import { getPageContext } from "@/lib/context";
 
 async function SidebarWithData() {
   const { data, model } = await getPageContext();
-  return <Sidebar insightCount={model.urgentCount} mode={data.mode} />;
+  return <Sidebar insightCount={model.urgentCount} mode={data.mode} demo={data.connection.notice === "demo"} />;
 }
 
-/** The signed-in dashboard shell. Everything under here requires a session. */
+async function MobileTabsWithData() {
+  const { data } = await getPageContext();
+  return <MobileTabs demo={data.connection.notice === "demo"} />;
+}
+
+/** The dashboard shell. Everything under here requires a session, except in demo mode (sample data only). */
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <>
@@ -25,7 +30,9 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         </div>
       </div>
       <Suspense fallback={null}>
-        <MobileTabs />
+        <Suspense fallback={<MobileTabs />}>
+          <MobileTabsWithData />
+        </Suspense>
       </Suspense>
     </>
   );

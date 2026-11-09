@@ -1,7 +1,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { LogOut, MoreHorizontal } from "lucide-react";
+import { KeyRound, LogOut, MoreHorizontal } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,7 +12,7 @@ import { isActive, NAV, SETTINGS_NAV } from "./nav";
 const PRIMARY = NAV.slice(0, 4);
 const MORE = [...NAV.slice(4), SETTINGS_NAV];
 
-export function MobileTabs() {
+export function MobileTabs({ demo = false }: { demo?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const moreActive = MORE.some((n) => isActive(pathname, n.href));
@@ -39,12 +39,19 @@ export function MobileTabs() {
                 {n.label}
               </Link>
             ))}
-            <form action={logoutAction}>
-              <button type="submit" className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.875rem] text-fg-2 hover:bg-card-2">
-                <LogOut size={22} className="text-fg-3" />
-                Sign out
-              </button>
-            </form>
+            {demo ? (
+              <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.875rem] text-warn hover:bg-card-2">
+                <KeyRound size={22} />
+                Set up login
+              </Link>
+            ) : (
+              <form action={logoutAction}>
+                <button type="submit" className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.875rem] text-fg-2 hover:bg-card-2">
+                  <LogOut size={22} className="text-fg-3" />
+                  Sign out
+                </button>
+              </form>
+            )}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

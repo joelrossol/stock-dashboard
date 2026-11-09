@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { currentUser } from "@/lib/auth/server";
+import { demoMode } from "@/lib/auth/session";
 import { exchangeCode, SchwabAuthError } from "@/lib/data/schwab/auth";
 import { clearLiveCache } from "@/lib/data/load";
 
@@ -7,7 +8,7 @@ const STATE_COOKIE = "schwab_oauth_state";
 
 /** Schwab redirects here after sign-in with ?code=…&state=… */
 export async function GET(req: NextRequest) {
-  if (!(await currentUser())) return NextResponse.redirect(new URL("/login", req.url));
+  if (demoMode() || !(await currentUser())) return NextResponse.redirect(new URL("/login", req.url));
   const fail = (msg: string) => {
     const res = NextResponse.redirect(new URL(`/settings?schwab_error=${encodeURIComponent(msg)}`, req.url));
     res.cookies.delete({ name: STATE_COOKIE, path: "/api/auth/schwab" });
