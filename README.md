@@ -4,6 +4,10 @@ See every Schwab account in one place: net worth over time against the S&P 500, 
 
 It runs on realistic **sample data** until you connect Schwab, so you can try everything in about five minutes before setting up any API keys.
 
+![Overview page on sample data](docs/screenshots/overview.webp)
+
+See [A tour of the app](#a-tour-of-the-app) for every page and what it shows.
+
 ---
 
 ## 1. Try it with sample data (5 minutes)
@@ -116,21 +120,100 @@ Vercel → Project → **Settings → Domains → Add**, then create the DNS rec
 
 ---
 
-## Using it
+## A tour of the app
 
-| Page | What it answers |
-|---|---|
-| **Overview** | How am I doing? Growth over the past week, month and year; net worth vs the S&P 500; a scorecard (you vs the S&P, today's winners vs losers, distance from your high, lead over the same deposits in the S&P); top holdings; watchlist movers; signals; accounts; a heatmap of today or this week. |
-| **Holdings** | What do I own? Every position combined across accounts, sector / asset type / account breakdowns, and concentration. |
-| **Watchlist** | What am I watching? Tiles or a table, with sparklines, 52-week range, earnings dates and target prices. |
-| **Trades** | Am I making good decisions? Each trade graded A–F, with "if you'd held / if you'd sold" and room for notes. |
-| **Performance** | Am I beating the market? Time- and money-weighted returns, the "same deposits in the S&P" comparison, risk, dividends, taxes. |
-| **Insights** | What needs attention? Every signal with the numbers behind it. Snooze or mute any of them. |
-| **Settings** | Connection, data source (Live / Sample), account names, signal thresholds. |
+Every screenshot below is the built-in sample data, so none of it is real. Each page says where its numbers come from: **Schwab** (your accounts and market data), **Finnhub** (earnings, analysts, news, sectors, insider trades), or **calculated** by the app from those two.
 
-The account switcher in the top bar (or **⌘K**) narrows every page to one account. Click any ticker to open its detail page.
+The account switcher in the top bar narrows every page to one account, and **⌘K** jumps to any ticker or page. Click any ticker to open its detail page.
 
-Signals are mechanical rules with thresholds you can change in Settings. They're not investment advice.
+### Overview: how am I doing?
+
+![Overview page](docs/screenshots/overview.webp)
+
+| Section | What it shows | Data from |
+|---|---|---|
+| Growth tiles | Gain over the past week, month and year, each compared with the S&P 500; unrealized gain; cash | Schwab, calculated |
+| Net worth | Total value over 1D to ALL, against the same deposits invested in the S&P 500 (dotted line), with deposits marked | Schwab, calculated |
+| Scorecard | How many ranges you're ahead of the S&P; today's $ change with the biggest winners and losers; distance from your high; lead over the S&P "shadow" portfolio | Calculated |
+| Top holdings | Largest positions with 30-day sparkline, today's move, weight, total gain and the strongest signal | Schwab, calculated |
+| Watchlist movers | Today's biggest moves on your watchlist and distance to your target price | Schwab |
+| Further down | Signals, accounts, a heatmap of today or this week, and upcoming earnings and dividends | All three |
+
+### Holdings: what do I own?
+
+![Holdings page](docs/screenshots/holdings.webp)
+
+| Section | What it shows | Data from |
+|---|---|---|
+| Breakdowns | Invested money by sector (funds grouped by category, such as US large cap or bonds), by asset type, and by account | Schwab, Finnhub |
+| Concentration | Largest position, top 5, top 10, and "effective holdings" (how many equal-size positions your portfolio behaves like) | Calculated |
+| Positions table | Every holding combined across accounts: 30-day sparkline, day $ and %, shares, value, total gain, 1W / 1M / YTD returns and the top signal. Rows held in more than one account expand to show each account. Sortable. | Schwab, calculated |
+
+### Watchlist: what am I watching?
+
+![Watchlist page](docs/screenshots/watchlist.webp)
+
+| Section | What it shows | Data from |
+|---|---|---|
+| Lists | Several named lists (for example Main and Speculative); add or remove symbols | Saved in your database |
+| Tiles or table | Price, day %, a 1D / 1M / 3M sparkline, trend label, 52-week range bar and upcoming earnings | Schwab, Finnhub, calculated |
+| Targets | Set a target price and a note. Hitting the target creates a signal. | Saved in your database |
+
+Schwab's API doesn't expose your Schwab watchlists, so the app keeps its own.
+
+### Trades: am I making good decisions?
+
+![Trades page with a trade open](docs/screenshots/trades.webp)
+
+| Section | What it shows | Data from |
+|---|---|---|
+| Scorecard | Round trips, win rate, average win and loss, profit factor | Schwab transactions, calculated |
+| Decision grades | How your trades grade overall, A to F | Calculated |
+| Patterns | How long you hold losers vs winners, how often selling early cost you, your costliest and best exits, your best entry | Calculated |
+| Trade journal | Every buy and sell. Click one to open it. | Schwab |
+| Trade detail | Price chart with your buys and sells marked; return since the trade vs the S&P; worst drop afterwards; an A–F grade at 30, 90 and 180 days and today; your timing within the surrounding 20 sessions; and a note on why you made the trade | Calculated, your notes |
+
+Grades weigh return vs the S&P (60%), timing (25%) and risk (15%) at fixed horizons, so a trade isn't judged purely in hindsight.
+
+### Performance: am I beating the market?
+
+![Performance page](docs/screenshots/performance.webp)
+
+| Section | What it shows | Data from |
+|---|---|---|
+| Headline numbers | Time-weighted return (your skill, deposits excluded), money-weighted return (your actual money, deposit timing included), lead over the S&P shadow portfolio, volatility, beta, max drawdown, Sharpe and Sortino | Calculated |
+| You vs the S&P | Your value against the same deposits put into an S&P 500 fund on the same days | Calculated |
+| Returns by period | You vs the S&P for 1M, 3M, 6M, YTD, 1Y and all time, plus market gain year to date | Calculated |
+| What drove returns | Each holding's contribution to this year's gain | Calculated |
+| Hidden concentration | How closely your top holdings move together | Calculated |
+| Stress test | Estimated loss if the market falls 10 / 20 / 30%, or if one top holding falls 20% | Calculated |
+| Further down | Dividend income and a tax view (short- vs long-term lots, harvest candidates, wash-sale check) | Schwab, calculated |
+
+### Insights: what needs my attention?
+
+![Insights page](docs/screenshots/insights.webp)
+
+| Section | What it shows | Data from |
+|---|---|---|
+| Signal cards | One card per stock, most urgent first, with the rule that fired, the numbers behind it and any related signals | Calculated, Finnhub |
+| Filters | Warnings, heads up, opportunities, tax and info | |
+| Actions | Snooze a card for 7 days, mute a ticker, or open the stock | Saved in your database |
+
+Signals cover around 30 rules: losing streaks, steady downtrends, abnormal drops, distance below your cost or your high, laggards, concentration and risk share, correlated clusters, earnings dates and gaps, analyst upgrades and downgrades, insider buying, buy-more and dip setups, breakouts, golden and death crosses, harvest and wash-sale checks, and a market check that tones down buy signals in a weak market. Percentage rules adjust for each stock's volatility. Every threshold can be changed in **Settings**. These are mechanical rules, not investment advice.
+
+### Stock detail (any ticker)
+
+| Section | What it shows | Data from |
+|---|---|---|
+| Chart | Price with 20/50/200-day averages and your buys and sells marked; candlesticks optional | Schwab |
+| Your position | Shares and cost in each account, gain, weight | Schwab |
+| Key stats and trend math | 52-week range, P/E, dividend yield, RSI, trend slope and consistency, move size vs normal | Schwab, calculated |
+| Earnings and analysts | Next earnings date and the trend in analyst ratings | Finnhub |
+| News and signals | Recent headlines and every signal for this stock | Finnhub, calculated |
+
+### Settings
+
+Connect or reconnect Schwab, switch between live and sample data, rename accounts and set their tax treatment, and tune every signal threshold. **Server configuration** shows a check or a cross for each environment variable (names only, never values), so you can see what's missing right away.
 
 ### How fresh is the data?
 
